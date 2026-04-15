@@ -1,0 +1,79 @@
+@page "/event/{EventId:int}/standings"
+@inject EventService EventService
+@rendermode InteractiveServer
+
+<PageTitle>Standings</PageTitle>
+
+@if (evt == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>Standings</h1>
+        <div>
+            <a href="/event/@evt.Id/schedule" class="btn btn-outline-secondary btn-sm me-2">Schedule</a>
+            <a href="/event/@evt.Id/setup" class="btn btn-outline-secondary btn-sm">Edit Setup</a>
+        </div>
+    </div>
+    <p class="text-muted">@evt.Name &middot; @evt.Date.ToString("MMMM d, yyyy")</p>
+
+    @if (standings == null || standings.Count == 0)
+    {
+        <div class="alert alert-info">No completed matches yet. Enter scores on the <a href="/event/@evt.Id/schedule">schedule page</a>.</div>
+    }
+    else
+    {
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Player</th>
+                    <th class="text-center">W</th>
+                    <th class="text-center">L</th>
+                    <th class="text-center">+/-</th>
+                </tr>
+            </thead>
+            <tbody>
+                @for (int i = 0; i < standings.Count; i++)
+                {
+                    var s = standings[i];
+                    <tr>
+                        <td>@(i + 1)</td>
+                        <td>
+                            @s.Player.Name
+                            @if (s.Player.DuprRating.HasValue)
+                            {
+                                <small class="text-muted ms-2">(@s.Player.DuprRating.Value.ToString("F1"))</small>
+                            }
+                        </td>
+                        <td class="text-center">@s.Wins</td>
+                        <td class="text-center">@s.Losses</td>
+                        <td class="text-center @(s.PointDifferential >= 0 ? "text-success" : "text-danger")">
+                            @(s.PointDifferential >= 0 ? "+" : "")@s.PointDifferential
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    [Parameter] public int EventId { get; set; }
+
+    private Event? evt;
+    private List<PlayerStanding>? standings;
+
+    protected override async Task OnInitializedAsync()
+    {
+        evt = await EventService.GetByIdAsync(EventId);
+        if (evt != null)
+        {
+            var players = evt.EventPlayers.Select(ep => ep.Player).ToList();
+            var matches = evt.Rounds.SelectMany(r => r.Matches).ToList();
+            standings = StandingsService.Calculate(players, matches);
+        }
+    }
+}
