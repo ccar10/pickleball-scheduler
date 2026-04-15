@@ -20,6 +20,17 @@ else
     </div>
     <p class="text-muted">@evt.Date.ToString("MMMM d, yyyy") &middot; @evt.EventPlayers.Count players &middot; @evt.NumberOfCourts courts</p>
 
+    @if (evt.Rounds.Count > 0)
+    {
+        var actualCourts = evt.Rounds.First().Matches.Count;
+        @if (actualCourts < evt.NumberOfCourts)
+        {
+            <div class="alert alert-warning">
+                Only @actualCourts of @evt.NumberOfCourts courts in use &mdash; need at least @((evt.NumberOfCourts) * 4) players to fill all courts (@evt.EventPlayers.Count currently).
+            </div>
+        }
+    }
+
     @if (evt.Rounds.Count == 0)
     {
         <div class="alert alert-info">No schedule generated yet. <a href="/event/@evt.Id/setup">Go to setup</a> to generate one.</div>

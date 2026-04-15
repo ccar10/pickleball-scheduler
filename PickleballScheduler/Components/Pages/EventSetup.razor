@@ -24,6 +24,14 @@
             <div class="col">
                 <label class="form-label">Courts</label>
                 <input type="number" class="form-control" @bind="numberOfCourts" min="1" />
+                @{
+                    var playersNeeded = numberOfCourts * 4;
+                    var usableCourts = Math.Min(numberOfCourts, selectedPlayerIds.Count / 4);
+                }
+                @if (selectedPlayerIds.Count > 0 && usableCourts < numberOfCourts)
+                {
+                    <small class="text-warning">Need @playersNeeded players for @numberOfCourts courts (@selectedPlayerIds.Count selected)</small>
+                }
             </div>
         </div>
         <div class="form-check mb-3">
