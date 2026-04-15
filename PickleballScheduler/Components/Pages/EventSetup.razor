@@ -41,22 +41,37 @@
     </div>
 
     <div class="col-md-6">
-        <h5>Players</h5>
+        <h5>Players <span class="text-muted fs-6">(@selectedPlayerIds.Count selected)</span></h5>
 
         @if (allPlayers != null)
         {
             <div class="list-group mb-3" style="max-height: 300px; overflow-y: auto;">
                 @foreach (var player in allPlayers)
                 {
-                    <label class="list-group-item d-flex justify-content-between align-items-center">
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
                         <div>
                             <input type="checkbox" class="form-check-input me-2"
                                    checked="@selectedPlayerIds.Contains(player.Id)"
                                    @onchange="() => TogglePlayer(player.Id)" />
                             @player.Name
                         </div>
-                        <span class="text-muted">@(player.DuprRating?.ToString("F1") ?? "—")</span>
-                    </label>
+                        @if (editingPlayerId == player.Id)
+                        {
+                            <div class="d-flex align-items-center gap-1">
+                                <input type="number" class="form-control form-control-sm text-center"
+                                       style="max-width: 70px;" step="0.1"
+                                       @bind="editingRating" />
+                                <button class="btn btn-sm btn-outline-success" @onclick="() => SaveRating(player)">OK</button>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => CancelEditRating()">X</button>
+                            </div>
+                        }
+                        else
+                        {
+                            <span class="text-muted" style="cursor: pointer;" title="Click to edit" @onclick="() => StartEditRating(player)">
+                                @(player.DuprRating?.ToString("F1") ?? "—")
+                            </span>
+                        }
+                    </div>
                 }
             </div>
         }
@@ -99,6 +114,8 @@
     private decimal? newPlayerRating;
     private string? validationError;
     private bool isGenerating;
+    private int? editingPlayerId;
+    private decimal? editingRating;
 
     protected override async Task OnInitializedAsync()
     {
@@ -126,6 +143,27 @@
             selectedPlayerIds.Add(playerId);
         }
         numberOfRounds = Math.Min(numberOfRounds, Math.Max(1, selectedPlayerIds.Count - 1));
+    }
+
+    private void StartEditRating(Player player)
+    {
+        editingPlayerId = player.Id;
+        editingRating = player.DuprRating;
+    }
+
+    private void CancelEditRating()
+    {
+        editingPlayerId = null;
+        editingRating = null;
+    }
+
+    private async Task SaveRating(Player player)
+    {
+        player.DuprRating = editingRating;
+        await PlayerService.UpdateAsync(player);
+        allPlayers = await PlayerService.GetAllAsync();
+        editingPlayerId = null;
+        editingRating = null;
     }
 
     private async Task AddPlayer()
