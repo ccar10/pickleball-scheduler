@@ -1,1 +1,23 @@
 .superpowers/
+
+# .NET build artifacts
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+.vs/
+
+# dotnet tool local install
+.config/
+
+# EF Core local database (data folder will be created at runtime)
+PickleballScheduler/Data/
+
+# NuGet packages (restored automatically)
+*.nupkg
+
+# Rider, VS Code
+.idea/
+.vscode/
