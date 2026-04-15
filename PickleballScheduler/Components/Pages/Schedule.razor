@@ -1,0 +1,124 @@
+@page "/event/{EventId:int}/schedule"
+@inject EventService EventService
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>Schedule</PageTitle>
+
+@if (evt == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>@evt.Name</h1>
+        <div>
+            <a href="/event/@evt.Id/setup" class="btn btn-outline-secondary btn-sm me-2">Edit Setup</a>
+            <a href="/event/@evt.Id/standings" class="btn btn-outline-primary btn-sm">Standings</a>
+        </div>
+    </div>
+    <p class="text-muted">@evt.Date.ToString("MMMM d, yyyy") &middot; @evt.EventPlayers.Count players &middot; @evt.NumberOfCourts courts</p>
+
+    @if (evt.Rounds.Count == 0)
+    {
+        <div class="alert alert-info">No schedule generated yet. <a href="/event/@evt.Id/setup">Go to setup</a> to generate one.</div>
+    }
+    else
+    {
+        @foreach (var round in evt.Rounds.OrderBy(r => r.RoundNumber))
+        {
+            <h4 class="mt-4 mb-3">Round @round.RoundNumber</h4>
+
+            <div class="row">
+                @foreach (var match in round.Matches.OrderBy(m => m.CourtNumber))
+                {
+                    <div class="col-md-6 mb-3">
+                        <div class="card @(match.IsComplete ? "border-success" : "")">
+                            <div class="card-header d-flex justify-content-between">
+                                <span>Court @match.CourtNumber</span>
+                                @if (match.IsComplete)
+                                {
+                                    <span class="text-success">&#10003;</span>
+                                }
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex justify-content-center align-items-center gap-3 mb-3">
+                                    <div class="text-center">
+                                        <strong>@match.Team1Player1.Name</strong>
+                                        <br />
+                                        <strong>@match.Team1Player2.Name</strong>
+                                    </div>
+                                    <span class="text-danger fw-bold">vs</span>
+                                    <div class="text-center">
+                                        <strong>@match.Team2Player1.Name</strong>
+                                        <br />
+                                        <strong>@match.Team2Player2.Name</strong>
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-center align-items-center gap-2">
+                                    <input type="number" class="form-control form-control-sm text-center"
+                                           style="max-width: 70px;"
+                                           value="@match.Team1Score"
+                                           @onchange="e => SaveScore(match.Id, e, true)" />
+                                    <span>-</span>
+                                    <input type="number" class="form-control form-control-sm text-center"
+                                           style="max-width: 70px;"
+                                           value="@match.Team2Score"
+                                           @onchange="e => SaveScore(match.Id, e, false)" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @if (round.Byes.Any())
+            {
+                <p class="text-muted fst-italic text-center">
+                    Sitting out: @string.Join(", ", round.Byes.Select(b => b.Player.Name))
+                </p>
+            }
+        }
+    }
+}
+
+@code {
+    [Parameter] public int EventId { get; set; }
+
+    private Event? evt;
+    private Dictionary<int, int?> team1Scores = new();
+    private Dictionary<int, int?> team2Scores = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        evt = await EventService.GetByIdAsync(EventId);
+        if (evt != null)
+        {
+            foreach (var round in evt.Rounds)
+            {
+                foreach (var match in round.Matches)
+                {
+                    team1Scores[match.Id] = match.Team1Score;
+                    team2Scores[match.Id] = match.Team2Score;
+                }
+            }
+        }
+    }
+
+    private async Task SaveScore(int matchId, ChangeEventArgs e, bool isTeam1)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var score)) return;
+
+        if (isTeam1)
+            team1Scores[matchId] = score;
+        else
+            team2Scores[matchId] = score;
+
+        if (team1Scores.GetValueOrDefault(matchId).HasValue && team2Scores.GetValueOrDefault(matchId).HasValue)
+        {
+            await EventService.SaveMatchScoreAsync(matchId, team1Scores[matchId]!.Value, team2Scores[matchId]!.Value);
+            evt = await EventService.GetByIdAsync(EventId);
+        }
+    }
+}
