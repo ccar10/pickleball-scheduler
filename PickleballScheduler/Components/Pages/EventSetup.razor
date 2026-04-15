@@ -1,0 +1,175 @@
+@page "/event/new"
+@page "/event/{EventId:int}/setup"
+@inject EventService EventService
+@inject PlayerService PlayerService
+@inject ScheduleGenerator ScheduleGenerator
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>Event Setup</PageTitle>
+
+<h1>@(isNew ? "New Event" : "Edit Event")</h1>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label class="form-label">Event Name</label>
+            <input type="text" class="form-control" @bind="eventName" />
+        </div>
+        <div class="row mb-3">
+            <div class="col">
+                <label class="form-label">Date</label>
+                <input type="date" class="form-control" @bind="eventDate" />
+            </div>
+            <div class="col">
+                <label class="form-label">Courts</label>
+                <input type="number" class="form-control" @bind="numberOfCourts" min="1" />
+            </div>
+        </div>
+        <div class="form-check mb-3">
+            <input type="checkbox" class="form-check-input" id="skillBalance" @bind="useSkillBalancing" />
+            <label class="form-check-label" for="skillBalance">Use Skill Balancing (DUPR)</label>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <h5>Players</h5>
+
+        @if (allPlayers != null)
+        {
+            <div class="list-group mb-3" style="max-height: 300px; overflow-y: auto;">
+                @foreach (var player in allPlayers)
+                {
+                    <label class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <input type="checkbox" class="form-check-input me-2"
+                                   checked="@selectedPlayerIds.Contains(player.Id)"
+                                   @onchange="() => TogglePlayer(player.Id)" />
+                            @player.Name
+                        </div>
+                        <span class="text-muted">@(player.DuprRating?.ToString("F1") ?? "—")</span>
+                    </label>
+                }
+            </div>
+        }
+
+        <div class="input-group mb-3">
+            <input type="text" class="form-control" placeholder="New player name..." @bind="newPlayerName" />
+            <input type="number" class="form-control" placeholder="DUPR" @bind="newPlayerRating" step="0.1" style="max-width: 100px;" />
+            <button class="btn btn-outline-secondary" @onclick="AddPlayer">Add</button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(validationError))
+        {
+            <div class="alert alert-danger">@validationError</div>
+        }
+
+        <div class="mb-3">
+            <label class="form-label">Number of Rounds</label>
+            <input type="number" class="form-control" @bind="numberOfRounds" min="1" />
+            <small class="text-muted">Max before partner repeats: @(selectedPlayerIds.Count > 0 ? selectedPlayerIds.Count - 1 : 0)</small>
+        </div>
+
+        <button class="btn btn-success w-100" @onclick="GenerateSchedule" disabled="@isGenerating">
+            @(isGenerating ? "Generating..." : "Generate Schedule")
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int? EventId { get; set; }
+
+    private bool isNew => EventId == null;
+    private string eventName = "Pickleball Session";
+    private DateTime eventDate = DateTime.Today;
+    private int numberOfCourts = 2;
+    private int numberOfRounds = 5;
+    private bool useSkillBalancing;
+    private List<Player>? allPlayers;
+    private HashSet<int> selectedPlayerIds = new();
+    private string newPlayerName = "";
+    private decimal? newPlayerRating;
+    private string? validationError;
+    private bool isGenerating;
+
+    protected override async Task OnInitializedAsync()
+    {
+        allPlayers = await PlayerService.GetAllAsync();
+
+        if (EventId.HasValue)
+        {
+            var evt = await EventService.GetByIdAsync(EventId.Value);
+            if (evt != null)
+            {
+                eventName = evt.Name;
+                eventDate = evt.Date;
+                numberOfCourts = evt.NumberOfCourts;
+                useSkillBalancing = evt.UseSkillBalancing;
+                selectedPlayerIds = evt.EventPlayers.Select(ep => ep.PlayerId).ToHashSet();
+                numberOfRounds = evt.Rounds.Count > 0 ? evt.Rounds.Count : selectedPlayerIds.Count - 1;
+            }
+        }
+    }
+
+    private void TogglePlayer(int playerId)
+    {
+        if (!selectedPlayerIds.Remove(playerId))
+        {
+            selectedPlayerIds.Add(playerId);
+        }
+        numberOfRounds = Math.Min(numberOfRounds, Math.Max(1, selectedPlayerIds.Count - 1));
+    }
+
+    private async Task AddPlayer()
+    {
+        if (string.IsNullOrWhiteSpace(newPlayerName)) return;
+
+        var player = await PlayerService.CreateAsync(newPlayerName.Trim(), newPlayerRating);
+        allPlayers = await PlayerService.GetAllAsync();
+        selectedPlayerIds.Add(player.Id);
+        newPlayerName = "";
+        newPlayerRating = null;
+    }
+
+    private async Task GenerateSchedule()
+    {
+        validationError = null;
+
+        if (selectedPlayerIds.Count < 4)
+        {
+            validationError = "Please select at least 4 players.";
+            return;
+        }
+        if (numberOfCourts < 1)
+        {
+            validationError = "Need at least 1 court.";
+            return;
+        }
+
+        isGenerating = true;
+
+        Event evt;
+        if (isNew)
+        {
+            evt = await EventService.CreateAsync(eventName, eventDate, numberOfCourts, useSkillBalancing);
+        }
+        else
+        {
+            evt = (await EventService.GetByIdAsync(EventId!.Value))!;
+            evt.Name = eventName;
+            evt.Date = eventDate;
+            evt.NumberOfCourts = numberOfCourts;
+            evt.UseSkillBalancing = useSkillBalancing;
+        }
+
+        await EventService.SetPlayersAsync(evt.Id, selectedPlayerIds.ToList());
+
+        var players = allPlayers!.Where(p => selectedPlayerIds.Contains(p.Id)).ToList();
+        var rounds = ScheduleGenerator.Generate(players, numberOfCourts, numberOfRounds, useSkillBalancing);
+
+        await EventService.SaveScheduleAsync(evt.Id, rounds);
+
+        isGenerating = false;
+        Nav.NavigateTo($"/event/{evt.Id}/schedule");
+    }
+}
