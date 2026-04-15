@@ -128,7 +128,7 @@ When `UseSkillBalancing` is enabled:
 - This replaces the variety-first greedy approach with a balance-first approach
 
 ### Number of Rounds
-- Default: `min(players - 1, reasonable_max)` — the theoretical max before partner repeats are unavoidable
+- Default: `players - 1` rounds — the theoretical max before partner repeats become unavoidable (e.g., 8 players = 7 rounds)
 - Organizer can override to set fewer rounds
 - The number of courts limits how many matches happen per round: `floor(active_players / 4)` matches per round, capped by court count
 
