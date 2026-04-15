@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PickleballScheduler.Components;
 using PickleballScheduler.Data;
+using PickleballScheduler.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,6 +10,9 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddScoped<PlayerService>();
+builder.Services.AddScoped<EventService>();
 
 var app = builder.Build();
 
