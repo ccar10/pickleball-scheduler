@@ -12,8 +12,10 @@ obj/
 # dotnet tool local install
 .config/
 
-# EF Core local database (data folder will be created at runtime)
-PickleballScheduler/Data/
+# EF Core local database (db file created at runtime)
+PickleballScheduler/Data/*.db
+PickleballScheduler/Data/*.db-shm
+PickleballScheduler/Data/*.db-wal
 
 # NuGet packages (restored automatically)
 *.nupkg
