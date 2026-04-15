@@ -14,6 +14,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<EventService>();
 builder.Services.AddScoped<ScheduleGenerator>();
+builder.Services.AddScoped<StandingsService>();
 
 var app = builder.Build();
 
