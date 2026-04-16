@@ -12,20 +12,13 @@ public class ScheduleGeneratorTests
             .ToList();
     }
 
-    private static List<Player> MakeRatedPlayers(int count)
-    {
-        return Enumerable.Range(1, count)
-            .Select(i => new Player { Id = i, Name = $"Player {i}", DuprRating = 2.0m + (i * 0.5m) })
-            .ToList();
-    }
-
     [Fact]
     public void Generate_4Players_ProducesRoundsWithUniquePartners()
     {
         var players = MakePlayers(4);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 3, useSkillBalancing: false);
+        var rounds = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 3);
 
         Assert.Equal(3, rounds.Count);
 
@@ -52,7 +45,7 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(5);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 4, useSkillBalancing: false);
+        var rounds = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 4);
 
         Assert.Equal(4, rounds.Count);
 
@@ -76,7 +69,7 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(8);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 3, useSkillBalancing: false);
+        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 3);
 
         Assert.Equal(3, rounds.Count);
         foreach (var round in rounds)
@@ -92,7 +85,7 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(8);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 5, useSkillBalancing: false);
+        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 5);
 
         var partnerships = new HashSet<string>();
         foreach (var round in rounds)
@@ -111,37 +104,12 @@ public class ScheduleGeneratorTests
     }
 
     [Fact]
-    public void Generate_SkillBalancing_PairsHighWithLow()
-    {
-        var players = MakeRatedPlayers(4);
-        var generator = new ScheduleGenerator();
-
-        var rounds = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 1, useSkillBalancing: true);
-
-        var match = rounds[0].Matches[0];
-        var team1Ratings = new[] {
-            players.First(p => p.Id == match.Team1Player1Id).DuprRating!.Value,
-            players.First(p => p.Id == match.Team1Player2Id).DuprRating!.Value
-        };
-        var team2Ratings = new[] {
-            players.First(p => p.Id == match.Team2Player1Id).DuprRating!.Value,
-            players.First(p => p.Id == match.Team2Player2Id).DuprRating!.Value
-        };
-
-        var team1Avg = team1Ratings.Average();
-        var team2Avg = team2Ratings.Average();
-
-        Assert.True(Math.Abs(team1Avg - team2Avg) <= 1.0m,
-            $"Team averages should be balanced: {team1Avg} vs {team2Avg}");
-    }
-
-    [Fact]
     public void Generate_6Players_1Court_2ByesPerRound()
     {
         var players = MakePlayers(6);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 4, useSkillBalancing: false);
+        var rounds = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 4);
 
         foreach (var round in rounds)
         {
@@ -156,7 +124,7 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(8);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 3, useSkillBalancing: false);
+        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 3);
 
         foreach (var round in rounds)
         {
@@ -174,6 +142,86 @@ public class ScheduleGeneratorTests
             }
 
             Assert.Equal(players.Count, playerIds.Count);
+        }
+    }
+
+    [Fact]
+    public void Generate_OpponentsVary_NoExcessiveRepeatOpponents()
+    {
+        var players = MakePlayers(8);
+        var generator = new ScheduleGenerator();
+
+        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 5);
+
+        // Track how many times each pair of players oppose each other
+        var opponentCounts = new Dictionary<string, int>();
+        foreach (var round in rounds)
+        {
+            foreach (var match in round.Matches)
+            {
+                var team1 = new[] { match.Team1Player1Id, match.Team1Player2Id };
+                var team2 = new[] { match.Team2Player1Id, match.Team2Player2Id };
+                foreach (var p1 in team1)
+                {
+                    foreach (var p2 in team2)
+                    {
+                        var key = PairKey(p1, p2);
+                        opponentCounts[key] = opponentCounts.GetValueOrDefault(key) + 1;
+                    }
+                }
+            }
+        }
+
+        // With 8 players over 5 rounds, each player has 28 possible opponents pairs.
+        // No opponent pair should appear excessively often.
+        var maxOpponentRepeats = opponentCounts.Values.Max();
+        Assert.True(maxOpponentRepeats <= 3,
+            $"Max opponent repeats was {maxOpponentRepeats}, expected 3 or less for good variety");
+    }
+
+    [Fact]
+    public void Generate_CourtAssignmentsVary()
+    {
+        var players = MakePlayers(8);
+        var generator = new ScheduleGenerator();
+
+        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 6);
+
+        // Track court assignments per player
+        var courtCounts = new Dictionary<int, Dictionary<int, int>>();
+        foreach (var p in players)
+        {
+            courtCounts[p.Id] = new Dictionary<int, int>();
+        }
+
+        foreach (var round in rounds)
+        {
+            foreach (var match in round.Matches)
+            {
+                var playerIds = new[] {
+                    match.Team1Player1Id, match.Team1Player2Id,
+                    match.Team2Player1Id, match.Team2Player2Id
+                };
+                foreach (var pid in playerIds)
+                {
+                    var court = match.CourtNumber;
+                    courtCounts[pid][court] = courtCounts[pid].GetValueOrDefault(court) + 1;
+                }
+            }
+        }
+
+        // With 2 courts over 6 rounds, each player plays all 6 rounds.
+        // Ideal would be 3 on each court. Allow up to 2 difference.
+        foreach (var pid in players.Select(p => p.Id))
+        {
+            var counts = courtCounts[pid];
+            if (counts.Count > 1)
+            {
+                var max = counts.Values.Max();
+                var min = counts.Values.Min();
+                Assert.True(max - min <= 2,
+                    $"Player {pid} has court imbalance: {string.Join(", ", counts.Select(kv => $"Court {kv.Key}: {kv.Value}"))}");
+            }
         }
     }
 

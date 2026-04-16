@@ -13,9 +13,9 @@ public class PlayerService
     public async Task<List<Player>> GetAllAsync()
         => await _db.Players.OrderBy(p => p.Name).ToListAsync();
 
-    public async Task<Player> CreateAsync(string name, decimal? duprRating)
+    public async Task<Player> CreateAsync(string name)
     {
-        var player = new Player { Name = name, DuprRating = duprRating };
+        var player = new Player { Name = name };
         _db.Players.Add(player);
         await _db.SaveChangesAsync();
         return player;

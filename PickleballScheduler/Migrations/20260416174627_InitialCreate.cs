@@ -19,8 +19,8 @@ namespace PickleballScheduler.Migrations
                         .Annotation("Sqlite:Autoincrement", true),
                     Name = table.Column<string>(type: "TEXT", nullable: false),
                     Date = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    UseSkillBalancing = table.Column<bool>(type: "INTEGER", nullable: false),
-                    NumberOfCourts = table.Column<int>(type: "INTEGER", nullable: false)
+                    NumberOfCourts = table.Column<int>(type: "INTEGER", nullable: false),
+                    CourtNames = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -33,9 +33,7 @@ namespace PickleballScheduler.Migrations
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
-                    Name = table.Column<string>(type: "TEXT", nullable: false),
-                    DuprRating = table.Column<decimal>(type: "TEXT", nullable: true),
-                    CreatedDate = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Name = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -121,10 +119,7 @@ namespace PickleballScheduler.Migrations
                     Team1Player1Id = table.Column<int>(type: "INTEGER", nullable: false),
                     Team1Player2Id = table.Column<int>(type: "INTEGER", nullable: false),
                     Team2Player1Id = table.Column<int>(type: "INTEGER", nullable: false),
-                    Team2Player2Id = table.Column<int>(type: "INTEGER", nullable: false),
-                    Team1Score = table.Column<int>(type: "INTEGER", nullable: true),
-                    Team2Score = table.Column<int>(type: "INTEGER", nullable: true),
-                    IsComplete = table.Column<bool>(type: "INTEGER", nullable: false)
+                    Team2Player2Id = table.Column<int>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {

@@ -14,7 +14,4 @@ public class Match
     public Player Team2Player1 { get; set; } = null!;
     public int Team2Player2Id { get; set; }
     public Player Team2Player2 { get; set; } = null!;
-    public int? Team1Score { get; set; }
-    public int? Team2Score { get; set; }
-    public bool IsComplete { get; set; }
 }

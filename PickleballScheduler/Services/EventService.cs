@@ -26,14 +26,14 @@ public class EventService
             .Include(e => e.Rounds).ThenInclude(r => r.Byes).ThenInclude(b => b.Player)
             .FirstOrDefaultAsync(e => e.Id == id);
 
-    public async Task<Event> CreateAsync(string name, DateTime date, int courts, bool useSkillBalancing)
+    public async Task<Event> CreateAsync(string name, DateTime date, int courts, string courtNames)
     {
         var evt = new Event
         {
             Name = name,
             Date = date,
             NumberOfCourts = courts,
-            UseSkillBalancing = useSkillBalancing
+            CourtNames = courtNames
         };
         _db.Events.Add(evt);
         await _db.SaveChangesAsync();
@@ -73,18 +73,6 @@ public class EventService
             _db.Rounds.Add(round);
         }
         await _db.SaveChangesAsync();
-    }
-
-    public async Task SaveMatchScoreAsync(int matchId, int team1Score, int team2Score)
-    {
-        var match = await _db.Matches.FindAsync(matchId);
-        if (match != null)
-        {
-            match.Team1Score = team1Score;
-            match.Team2Score = team2Score;
-            match.IsComplete = true;
-            await _db.SaveChangesAsync();
-        }
     }
 
     public async Task DeleteAsync(int id)

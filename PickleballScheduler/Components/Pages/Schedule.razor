@@ -1,6 +1,6 @@
 @page "/event/{EventId:int}/schedule"
 @inject EventService EventService
-@inject NavigationManager Nav
+@inject IJSRuntime JS
 @rendermode InteractiveServer
 
 <PageTitle>Schedule</PageTitle>
@@ -11,25 +11,11 @@
 }
 else
 {
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1>@evt.Name</h1>
-        <div>
-            <a href="/event/@evt.Id/setup" class="btn btn-outline-secondary btn-sm me-2">Edit Setup</a>
-            <a href="/event/@evt.Id/standings" class="btn btn-outline-primary btn-sm">Standings</a>
-        </div>
+    <div class="schedule-header">
+        <h1 class="mb-1">@evt.Name</h1>
+        <p class="text-muted mb-2">@evt.Date.ToString("MMMM d, yyyy") &middot; @evt.EventPlayers.Count players &middot; @courtNames.Count courts</p>
+        <button class="btn btn-outline-primary btn-sm no-print" @onclick="Print">Print Schedule</button>
     </div>
-    <p class="text-muted">@evt.Date.ToString("MMMM d, yyyy") &middot; @evt.EventPlayers.Count players &middot; @evt.NumberOfCourts courts</p>
-
-    @if (evt.Rounds.Count > 0)
-    {
-        var actualCourts = evt.Rounds.First().Matches.Count;
-        @if (actualCourts < evt.NumberOfCourts)
-        {
-            <div class="alert alert-warning">
-                Only @actualCourts of @evt.NumberOfCourts courts in use &mdash; need at least @((evt.NumberOfCourts) * 4) players to fill all courts (@evt.EventPlayers.Count currently).
-            </div>
-        }
-    }
 
     @if (evt.Rounds.Count == 0)
     {
@@ -37,60 +23,47 @@ else
     }
     else
     {
-        @foreach (var round in evt.Rounds.OrderBy(r => r.RoundNumber))
-        {
-            <h4 class="mt-4 mb-3">Round @round.RoundNumber</h4>
-
-            <div class="row">
-                @foreach (var match in round.Matches.OrderBy(m => m.CourtNumber))
+        <table class="table table-bordered schedule-table mt-3">
+            <thead>
+                <tr>
+                    <th class="round-col">Round</th>
+                    @foreach (var courtName in courtNames)
+                    {
+                        <th class="text-center">@courtName</th>
+                    }
+                    <th class="text-center bye-col">Bye</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var round in evt.Rounds.OrderBy(r => r.RoundNumber))
                 {
-                    <div class="col-md-6 mb-3">
-                        <div class="card @(match.IsComplete ? "border-success" : "")">
-                            <div class="card-header d-flex justify-content-between">
-                                <span>Court @match.CourtNumber</span>
-                                @if (match.IsComplete)
+                    <tr>
+                        <td class="fw-bold text-center align-middle">@round.RoundNumber</td>
+                        @for (int c = 0; c < courtNames.Count; c++)
+                        {
+                            var courtNum = c + 1;
+                            var match = round.Matches.FirstOrDefault(m => m.CourtNumber == courtNum);
+                            <td class="text-center align-middle">
+                                @if (match != null)
                                 {
-                                    <span class="text-success">&#10003;</span>
+                                    <span>@match.Team1Player1.Name &amp; @match.Team1Player2.Name</span>
+                                    <br />
+                                    <small class="text-muted">vs</small>
+                                    <br />
+                                    <span>@match.Team2Player1.Name &amp; @match.Team2Player2.Name</span>
                                 }
-                            </div>
-                            <div class="card-body">
-                                <div class="d-flex justify-content-center align-items-center gap-3 mb-3">
-                                    <div class="text-center">
-                                        <strong>@match.Team1Player1.Name</strong>
-                                        <br />
-                                        <strong>@match.Team1Player2.Name</strong>
-                                    </div>
-                                    <span class="text-danger fw-bold">vs</span>
-                                    <div class="text-center">
-                                        <strong>@match.Team2Player1.Name</strong>
-                                        <br />
-                                        <strong>@match.Team2Player2.Name</strong>
-                                    </div>
-                                </div>
-                                <div class="d-flex justify-content-center align-items-center gap-2">
-                                    <input type="number" class="form-control form-control-sm text-center"
-                                           style="max-width: 70px;"
-                                           value="@match.Team1Score"
-                                           @onchange="e => SaveScore(match.Id, e, true)" />
-                                    <span>-</span>
-                                    <input type="number" class="form-control form-control-sm text-center"
-                                           style="max-width: 70px;"
-                                           value="@match.Team2Score"
-                                           @onchange="e => SaveScore(match.Id, e, false)" />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                            </td>
+                        }
+                        <td class="text-center align-middle text-muted fst-italic">
+                            @if (round.Byes.Any())
+                            {
+                                @string.Join(", ", round.Byes.Select(b => b.Player.Name))
+                            }
+                        </td>
+                    </tr>
                 }
-            </div>
-
-            @if (round.Byes.Any())
-            {
-                <p class="text-muted fst-italic text-center">
-                    Sitting out: @string.Join(", ", round.Byes.Select(b => b.Player.Name))
-                </p>
-            }
-        }
+            </tbody>
+        </table>
     }
 }
 
@@ -98,38 +71,19 @@ else
     [Parameter] public int EventId { get; set; }
 
     private Event? evt;
-    private Dictionary<int, int?> team1Scores = new();
-    private Dictionary<int, int?> team2Scores = new();
+    private List<string> courtNames = new();
 
     protected override async Task OnInitializedAsync()
     {
         evt = await EventService.GetByIdAsync(EventId);
         if (evt != null)
         {
-            foreach (var round in evt.Rounds)
-            {
-                foreach (var match in round.Matches)
-                {
-                    team1Scores[match.Id] = match.Team1Score;
-                    team2Scores[match.Id] = match.Team2Score;
-                }
-            }
+            courtNames = evt.GetCourtNamesList();
         }
     }
 
-    private async Task SaveScore(int matchId, ChangeEventArgs e, bool isTeam1)
+    private async Task Print()
     {
-        if (!int.TryParse(e.Value?.ToString(), out var score)) return;
-
-        if (isTeam1)
-            team1Scores[matchId] = score;
-        else
-            team2Scores[matchId] = score;
-
-        if (team1Scores.GetValueOrDefault(matchId).HasValue && team2Scores.GetValueOrDefault(matchId).HasValue)
-        {
-            await EventService.SaveMatchScoreAsync(matchId, team1Scores[matchId]!.Value, team2Scores[matchId]!.Value);
-            evt = await EventService.GetByIdAsync(EventId);
-        }
+        await JS.InvokeVoidAsync("window.print");
     }
 }

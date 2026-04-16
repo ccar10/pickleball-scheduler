@@ -16,27 +16,36 @@
             <label class="form-label">Event Name</label>
             <input type="text" class="form-control" @bind="eventName" />
         </div>
-        <div class="row mb-3">
-            <div class="col">
-                <label class="form-label">Date</label>
-                <input type="date" class="form-control" @bind="eventDate" />
-            </div>
-            <div class="col">
-                <label class="form-label">Courts</label>
-                <input type="number" class="form-control" @bind="numberOfCourts" min="1" />
-                @{
-                    var playersNeeded = numberOfCourts * 4;
-                    var usableCourts = Math.Min(numberOfCourts, players.Count / 4);
-                }
-                @if (players.Count > 0 && usableCourts < numberOfCourts)
-                {
-                    <small class="text-warning">Need @playersNeeded players for @numberOfCourts courts (@players.Count entered)</small>
-                }
-            </div>
+        <div class="mb-3">
+            <label class="form-label">Date</label>
+            <input type="date" class="form-control" @bind="eventDate" />
         </div>
-        <div class="form-check mb-3">
-            <input type="checkbox" class="form-check-input" id="skillBalance" @bind="useSkillBalancing" />
-            <label class="form-check-label" for="skillBalance">Use Skill Balancing (DUPR)</label>
+
+        <div class="mb-3">
+            <label class="form-label">Courts</label>
+            <div class="list-group mb-2">
+                @for (int i = 0; i < courtNames.Count; i++)
+                {
+                    var index = i;
+                    <div class="list-group-item d-flex align-items-center gap-2 py-1">
+                        <input type="text" class="form-control form-control-sm" value="@courtNames[index]"
+                               @onchange="e => UpdateCourtName(index, e)" />
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveCourt(index)"
+                                disabled="@(courtNames.Count <= 1)">X</button>
+                    </div>
+                }
+            </div>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="AddCourt">+ Add Court</button>
+            @{
+                var playersNeeded = courtNames.Count * 4;
+                var usableCourts = Math.Min(courtNames.Count, players.Count / 4);
+            }
+            @if (players.Count > 0 && usableCourts < courtNames.Count)
+            {
+                <div class="mt-1">
+                    <small class="text-warning">Need @playersNeeded players for @courtNames.Count courts (@players.Count entered)</small>
+                </div>
+            }
         </div>
 
         <div class="mb-3">
@@ -58,9 +67,6 @@
                     <span class="text-muted" style="min-width: 24px;">@(index + 1).</span>
                     <input type="text" class="form-control form-control-sm" value="@p.Name"
                            @onchange="e => UpdateName(index, e)" placeholder="Name" />
-                    <input type="number" class="form-control form-control-sm text-center" style="max-width: 80px;"
-                           value="@p.DuprRating" step="0.1" placeholder="DUPR"
-                           @onchange="e => UpdateRating(index, e)" />
                     <button class="btn btn-sm btn-outline-danger" @onclick="() => RemovePlayer(index)">X</button>
                 </div>
             }
@@ -69,8 +75,6 @@
         <div class="input-group mb-3">
             <input type="text" class="form-control" placeholder="Add player name..." @bind="newPlayerName"
                    @onkeydown="HandleKeyDown" />
-            <input type="number" class="form-control" placeholder="DUPR" @bind="newPlayerRating"
-                   step="0.1" style="max-width: 100px;" />
             <button class="btn btn-outline-secondary" @onclick="AddPlayer">Add</button>
         </div>
 
@@ -91,19 +95,16 @@
     private bool isNew => EventId == null;
     private string eventName = "Pickleball Session";
     private DateTime eventDate = DateTime.Today;
-    private int numberOfCourts = 2;
+    private List<string> courtNames = new() { "Court 1", "Court 2" };
     private int numberOfRounds = 5;
-    private bool useSkillBalancing;
     private List<PlayerEntry> players = new();
     private string newPlayerName = "";
-    private decimal? newPlayerRating;
     private string? validationError;
     private bool isGenerating;
 
     private class PlayerEntry
     {
         public string Name { get; set; } = "";
-        public decimal? DuprRating { get; set; }
     }
 
     protected override async Task OnInitializedAsync()
@@ -115,24 +116,39 @@
             {
                 eventName = evt.Name;
                 eventDate = evt.Date;
-                numberOfCourts = evt.NumberOfCourts;
-                useSkillBalancing = evt.UseSkillBalancing;
+                courtNames = evt.GetCourtNamesList();
                 players = evt.EventPlayers.Select(ep => new PlayerEntry
                 {
-                    Name = ep.Player.Name,
-                    DuprRating = ep.Player.DuprRating
+                    Name = ep.Player.Name
                 }).ToList();
                 numberOfRounds = evt.Rounds.Count > 0 ? evt.Rounds.Count : Math.Max(1, players.Count - 1);
             }
         }
     }
 
+    private void AddCourt()
+    {
+        courtNames.Add($"Court {courtNames.Count + 1}");
+    }
+
+    private void RemoveCourt(int index)
+    {
+        if (courtNames.Count > 1)
+        {
+            courtNames.RemoveAt(index);
+        }
+    }
+
+    private void UpdateCourtName(int index, ChangeEventArgs e)
+    {
+        courtNames[index] = e.Value?.ToString() ?? $"Court {index + 1}";
+    }
+
     private void AddPlayer()
     {
         if (string.IsNullOrWhiteSpace(newPlayerName)) return;
-        players.Add(new PlayerEntry { Name = newPlayerName.Trim(), DuprRating = newPlayerRating });
+        players.Add(new PlayerEntry { Name = newPlayerName.Trim() });
         newPlayerName = "";
-        newPlayerRating = null;
     }
 
     private void HandleKeyDown(KeyboardEventArgs e)
@@ -153,14 +169,6 @@
         players[index].Name = e.Value?.ToString() ?? "";
     }
 
-    private void UpdateRating(int index, ChangeEventArgs e)
-    {
-        if (decimal.TryParse(e.Value?.ToString(), out var rating))
-            players[index].DuprRating = rating;
-        else
-            players[index].DuprRating = null;
-    }
-
     private async Task GenerateSchedule()
     {
         validationError = null;
@@ -173,7 +181,7 @@
             validationError = "Please enter at least 4 players.";
             return;
         }
-        if (numberOfCourts < 1)
+        if (courtNames.Count < 1)
         {
             validationError = "Need at least 1 court.";
             return;
@@ -181,11 +189,14 @@
 
         isGenerating = true;
 
+        var numberOfCourts = courtNames.Count;
+        var courtNamesStr = string.Join(";", courtNames);
+
         // Create event
         Event evt;
         if (isNew)
         {
-            evt = await EventService.CreateAsync(eventName, eventDate, numberOfCourts, useSkillBalancing);
+            evt = await EventService.CreateAsync(eventName, eventDate, numberOfCourts, courtNamesStr);
         }
         else
         {
@@ -193,20 +204,20 @@
             evt.Name = eventName;
             evt.Date = eventDate;
             evt.NumberOfCourts = numberOfCourts;
-            evt.UseSkillBalancing = useSkillBalancing;
+            evt.CourtNames = courtNamesStr;
         }
 
         // Create fresh player records for this event
         var dbPlayers = new List<Player>();
         foreach (var p in players)
         {
-            var player = await PlayerService.CreateAsync(p.Name, p.DuprRating);
+            var player = await PlayerService.CreateAsync(p.Name);
             dbPlayers.Add(player);
         }
 
         await EventService.SetPlayersAsync(evt.Id, dbPlayers.Select(p => p.Id).ToList());
 
-        var rounds = ScheduleGenerator.Generate(dbPlayers, numberOfCourts, numberOfRounds, useSkillBalancing);
+        var rounds = ScheduleGenerator.Generate(dbPlayers, numberOfCourts, numberOfRounds);
         await EventService.SaveScheduleAsync(evt.Id, rounds);
 
         isGenerating = false;

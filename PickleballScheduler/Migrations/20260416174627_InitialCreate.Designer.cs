@@ -11,7 +11,7 @@ using PickleballScheduler.Data;
 namespace PickleballScheduler.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260415193551_InitialCreate")]
+    [Migration("20260416174627_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -41,6 +41,10 @@ namespace PickleballScheduler.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("CourtNames")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("Date")
                         .HasColumnType("TEXT");
 
@@ -49,9 +53,6 @@ namespace PickleballScheduler.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<int>("NumberOfCourts")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("UseSkillBalancing")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
@@ -83,9 +84,6 @@ namespace PickleballScheduler.Migrations
                     b.Property<int>("CourtNumber")
                         .HasColumnType("INTEGER");
 
-                    b.Property<bool>("IsComplete")
-                        .HasColumnType("INTEGER");
-
                     b.Property<int>("RoundId")
                         .HasColumnType("INTEGER");
 
@@ -95,16 +93,10 @@ namespace PickleballScheduler.Migrations
                     b.Property<int>("Team1Player2Id")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int?>("Team1Score")
-                        .HasColumnType("INTEGER");
-
                     b.Property<int>("Team2Player1Id")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("Team2Player2Id")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("Team2Score")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
@@ -127,12 +119,6 @@ namespace PickleballScheduler.Migrations
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedDate")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal?>("DuprRating")
-                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
                         .IsRequired()
