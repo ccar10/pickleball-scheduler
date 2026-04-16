@@ -26,11 +26,11 @@
                 <input type="number" class="form-control" @bind="numberOfCourts" min="1" />
                 @{
                     var playersNeeded = numberOfCourts * 4;
-                    var usableCourts = Math.Min(numberOfCourts, selectedPlayerIds.Count / 4);
+                    var usableCourts = Math.Min(numberOfCourts, players.Count / 4);
                 }
-                @if (selectedPlayerIds.Count > 0 && usableCourts < numberOfCourts)
+                @if (players.Count > 0 && usableCourts < numberOfCourts)
                 {
-                    <small class="text-warning">Need @playersNeeded players for @numberOfCourts courts (@selectedPlayerIds.Count selected)</small>
+                    <small class="text-warning">Need @playersNeeded players for @numberOfCourts courts (@players.Count entered)</small>
                 }
             </div>
         </div>
@@ -38,47 +38,39 @@
             <input type="checkbox" class="form-check-input" id="skillBalance" @bind="useSkillBalancing" />
             <label class="form-check-label" for="skillBalance">Use Skill Balancing (DUPR)</label>
         </div>
+
+        <div class="mb-3">
+            <label class="form-label">Number of Rounds</label>
+            <input type="number" class="form-control" @bind="numberOfRounds" min="1" />
+            <small class="text-muted">Max before partner repeats: @(players.Count > 0 ? players.Count - 1 : 0)</small>
+        </div>
     </div>
 
     <div class="col-md-6">
-        <h5>Players <span class="text-muted fs-6">(@selectedPlayerIds.Count selected)</span></h5>
+        <h5>Players <span class="text-muted fs-6">(@players.Count)</span></h5>
 
-        @if (allPlayers != null)
-        {
-            <div class="list-group mb-3" style="max-height: 300px; overflow-y: auto;">
-                @foreach (var player in allPlayers)
-                {
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <input type="checkbox" class="form-check-input me-2"
-                                   checked="@selectedPlayerIds.Contains(player.Id)"
-                                   @onchange="() => TogglePlayer(player.Id)" />
-                            @player.Name
-                        </div>
-                        @if (editingPlayerId == player.Id)
-                        {
-                            <div class="d-flex align-items-center gap-1">
-                                <input type="number" class="form-control form-control-sm text-center"
-                                       style="max-width: 70px;" step="0.1"
-                                       @bind="editingRating" />
-                                <button class="btn btn-sm btn-outline-success" @onclick="() => SaveRating(player)">OK</button>
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => CancelEditRating()">X</button>
-                            </div>
-                        }
-                        else
-                        {
-                            <span class="text-muted" style="cursor: pointer;" title="Click to edit" @onclick="() => StartEditRating(player)">
-                                @(player.DuprRating?.ToString("F1") ?? "—")
-                            </span>
-                        }
-                    </div>
-                }
-            </div>
-        }
+        <div class="list-group mb-3" style="max-height: 350px; overflow-y: auto;">
+            @for (int i = 0; i < players.Count; i++)
+            {
+                var index = i;
+                var p = players[index];
+                <div class="list-group-item d-flex align-items-center gap-2">
+                    <span class="text-muted" style="min-width: 24px;">@(index + 1).</span>
+                    <input type="text" class="form-control form-control-sm" value="@p.Name"
+                           @onchange="e => UpdateName(index, e)" placeholder="Name" />
+                    <input type="number" class="form-control form-control-sm text-center" style="max-width: 80px;"
+                           value="@p.DuprRating" step="0.1" placeholder="DUPR"
+                           @onchange="e => UpdateRating(index, e)" />
+                    <button class="btn btn-sm btn-outline-danger" @onclick="() => RemovePlayer(index)">X</button>
+                </div>
+            }
+        </div>
 
         <div class="input-group mb-3">
-            <input type="text" class="form-control" placeholder="New player name..." @bind="newPlayerName" />
-            <input type="number" class="form-control" placeholder="DUPR" @bind="newPlayerRating" step="0.1" style="max-width: 100px;" />
+            <input type="text" class="form-control" placeholder="Add player name..." @bind="newPlayerName"
+                   @onkeydown="HandleKeyDown" />
+            <input type="number" class="form-control" placeholder="DUPR" @bind="newPlayerRating"
+                   step="0.1" style="max-width: 100px;" />
             <button class="btn btn-outline-secondary" @onclick="AddPlayer">Add</button>
         </div>
 
@@ -86,12 +78,6 @@
         {
             <div class="alert alert-danger">@validationError</div>
         }
-
-        <div class="mb-3">
-            <label class="form-label">Number of Rounds</label>
-            <input type="number" class="form-control" @bind="numberOfRounds" min="1" />
-            <small class="text-muted">Max before partner repeats: @(selectedPlayerIds.Count > 0 ? selectedPlayerIds.Count - 1 : 0)</small>
-        </div>
 
         <button class="btn btn-success w-100" @onclick="GenerateSchedule" disabled="@isGenerating">
             @(isGenerating ? "Generating..." : "Generate Schedule")
@@ -108,19 +94,20 @@
     private int numberOfCourts = 2;
     private int numberOfRounds = 5;
     private bool useSkillBalancing;
-    private List<Player>? allPlayers;
-    private HashSet<int> selectedPlayerIds = new();
+    private List<PlayerEntry> players = new();
     private string newPlayerName = "";
     private decimal? newPlayerRating;
     private string? validationError;
     private bool isGenerating;
-    private int? editingPlayerId;
-    private decimal? editingRating;
+
+    private class PlayerEntry
+    {
+        public string Name { get; set; } = "";
+        public decimal? DuprRating { get; set; }
+    }
 
     protected override async Task OnInitializedAsync()
     {
-        allPlayers = await PlayerService.GetAllAsync();
-
         if (EventId.HasValue)
         {
             var evt = await EventService.GetByIdAsync(EventId.Value);
@@ -130,60 +117,60 @@
                 eventDate = evt.Date;
                 numberOfCourts = evt.NumberOfCourts;
                 useSkillBalancing = evt.UseSkillBalancing;
-                selectedPlayerIds = evt.EventPlayers.Select(ep => ep.PlayerId).ToHashSet();
-                numberOfRounds = evt.Rounds.Count > 0 ? evt.Rounds.Count : selectedPlayerIds.Count - 1;
+                players = evt.EventPlayers.Select(ep => new PlayerEntry
+                {
+                    Name = ep.Player.Name,
+                    DuprRating = ep.Player.DuprRating
+                }).ToList();
+                numberOfRounds = evt.Rounds.Count > 0 ? evt.Rounds.Count : Math.Max(1, players.Count - 1);
             }
         }
     }
 
-    private void TogglePlayer(int playerId)
-    {
-        if (!selectedPlayerIds.Remove(playerId))
-        {
-            selectedPlayerIds.Add(playerId);
-        }
-        numberOfRounds = Math.Min(numberOfRounds, Math.Max(1, selectedPlayerIds.Count - 1));
-    }
-
-    private void StartEditRating(Player player)
-    {
-        editingPlayerId = player.Id;
-        editingRating = player.DuprRating;
-    }
-
-    private void CancelEditRating()
-    {
-        editingPlayerId = null;
-        editingRating = null;
-    }
-
-    private async Task SaveRating(Player player)
-    {
-        player.DuprRating = editingRating;
-        await PlayerService.UpdateAsync(player);
-        allPlayers = await PlayerService.GetAllAsync();
-        editingPlayerId = null;
-        editingRating = null;
-    }
-
-    private async Task AddPlayer()
+    private void AddPlayer()
     {
         if (string.IsNullOrWhiteSpace(newPlayerName)) return;
-
-        var player = await PlayerService.CreateAsync(newPlayerName.Trim(), newPlayerRating);
-        allPlayers = await PlayerService.GetAllAsync();
-        selectedPlayerIds.Add(player.Id);
+        players.Add(new PlayerEntry { Name = newPlayerName.Trim(), DuprRating = newPlayerRating });
         newPlayerName = "";
         newPlayerRating = null;
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            AddPlayer();
+        }
+    }
+
+    private void RemovePlayer(int index)
+    {
+        players.RemoveAt(index);
+    }
+
+    private void UpdateName(int index, ChangeEventArgs e)
+    {
+        players[index].Name = e.Value?.ToString() ?? "";
+    }
+
+    private void UpdateRating(int index, ChangeEventArgs e)
+    {
+        if (decimal.TryParse(e.Value?.ToString(), out var rating))
+            players[index].DuprRating = rating;
+        else
+            players[index].DuprRating = null;
     }
 
     private async Task GenerateSchedule()
     {
         validationError = null;
 
-        if (selectedPlayerIds.Count < 4)
+        // Remove any blank names
+        players.RemoveAll(p => string.IsNullOrWhiteSpace(p.Name));
+
+        if (players.Count < 4)
         {
-            validationError = "Please select at least 4 players.";
+            validationError = "Please enter at least 4 players.";
             return;
         }
         if (numberOfCourts < 1)
@@ -194,6 +181,7 @@
 
         isGenerating = true;
 
+        // Create event
         Event evt;
         if (isNew)
         {
@@ -208,11 +196,17 @@
             evt.UseSkillBalancing = useSkillBalancing;
         }
 
-        await EventService.SetPlayersAsync(evt.Id, selectedPlayerIds.ToList());
+        // Create fresh player records for this event
+        var dbPlayers = new List<Player>();
+        foreach (var p in players)
+        {
+            var player = await PlayerService.CreateAsync(p.Name, p.DuprRating);
+            dbPlayers.Add(player);
+        }
 
-        var players = allPlayers!.Where(p => selectedPlayerIds.Contains(p.Id)).ToList();
-        var rounds = ScheduleGenerator.Generate(players, numberOfCourts, numberOfRounds, useSkillBalancing);
+        await EventService.SetPlayersAsync(evt.Id, dbPlayers.Select(p => p.Id).ToList());
 
+        var rounds = ScheduleGenerator.Generate(dbPlayers, numberOfCourts, numberOfRounds, useSkillBalancing);
         await EventService.SaveScheduleAsync(evt.Id, rounds);
 
         isGenerating = false;
