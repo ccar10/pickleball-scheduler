@@ -8,8 +8,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+var dbPath = builder.Configuration.GetConnectionString("DefaultConnection")!;
+var dataDir = Path.GetDirectoryName(dbPath.Replace("Data Source=", ""));
+if (!string.IsNullOrEmpty(dataDir))
+{
+    Directory.CreateDirectory(dataDir);
+}
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlite(dbPath));
 
 builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<EventService>();
