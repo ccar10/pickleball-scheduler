@@ -32,6 +32,14 @@ public class ScheduleGenerator
             // Form teams with backtracking (no repeated partners, prefer new opponents)
             var teams = FormTeams(shuffled, usedPartnerships);
 
+            // If backtracking failed (all partnerships exhausted), reset and try again
+            // This handles rounds beyond the partner limit (e.g., round 8+ with 8 players)
+            if (teams.Count < matchesPerRound)
+            {
+                usedPartnerships.Clear();
+                teams = FormTeams(shuffled, usedPartnerships);
+            }
+
             // Pair teams into matches, preferring opponents who haven't faced each other
             var matches = PairTeamsIntoMatches(teams, usedOpponents);
 
