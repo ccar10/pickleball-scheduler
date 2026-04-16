@@ -4,21 +4,28 @@
 @inject PlayerService PlayerService
 @inject ScheduleGenerator ScheduleGenerator
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @rendermode InteractiveServer
 
 <PageTitle>Event Setup</PageTitle>
 
-<h1>@(isNew ? "New Event" : "Edit Event")</h1>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>@(isNew ? "New Event" : "Edit Event")</h1>
+    @if (isNew)
+    {
+        <button class="btn btn-outline-danger btn-sm" @onclick="ResetForm">Reset</button>
+    }
+</div>
 
 <div class="row">
     <div class="col-md-6">
         <div class="mb-3">
             <label class="form-label">Event Name</label>
-            <input type="text" class="form-control" @bind="eventName" />
+            <input type="text" class="form-control" @bind="eventName" @bind:after="SaveToLocalStorage" />
         </div>
         <div class="mb-3">
             <label class="form-label">Date</label>
-            <input type="date" class="form-control" @bind="eventDate" />
+            <input type="date" class="form-control" @bind="eventDate" @bind:after="SaveToLocalStorage" />
         </div>
 
         <div class="mb-3">
@@ -50,7 +57,7 @@
 
         <div class="mb-3">
             <label class="form-label">Number of Rounds</label>
-            <input type="number" class="form-control" @bind="numberOfRounds" min="1" />
+            <input type="number" class="form-control" @bind="numberOfRounds" @bind:after="SaveToLocalStorage" min="1" />
             <small class="text-muted">Max before partner repeats: @(players.Count > 0 ? players.Count - 1 : 0)</small>
         </div>
     </div>
@@ -102,9 +109,20 @@
     private string? validationError;
     private bool isGenerating;
 
+    private const string StorageKey = "pb-event-setup";
+
     private class PlayerEntry
     {
         public string Name { get; set; } = "";
+    }
+
+    private class SavedState
+    {
+        public string EventName { get; set; } = "";
+        public string EventDate { get; set; } = "";
+        public List<string> CourtNames { get; set; } = new();
+        public int NumberOfRounds { get; set; }
+        public List<string> PlayerNames { get; set; } = new();
     }
 
     protected override async Task OnInitializedAsync()
@@ -126,47 +144,113 @@
         }
     }
 
-    private void AddCourt()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        courtNames.Add($"Court {courtNames.Count + 1}");
+        if (firstRender && isNew)
+        {
+            await LoadFromLocalStorage();
+            StateHasChanged();
+        }
     }
 
-    private void RemoveCourt(int index)
+    private async Task LoadFromLocalStorage()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("localStorage.getItem", StorageKey);
+            if (string.IsNullOrEmpty(json)) return;
+
+            var state = System.Text.Json.JsonSerializer.Deserialize<SavedState>(json);
+            if (state == null) return;
+
+            if (!string.IsNullOrEmpty(state.EventName)) eventName = state.EventName;
+            if (DateTime.TryParse(state.EventDate, out var date)) eventDate = date;
+            if (state.CourtNames.Count > 0) courtNames = state.CourtNames;
+            if (state.NumberOfRounds > 0) numberOfRounds = state.NumberOfRounds;
+            if (state.PlayerNames.Count > 0)
+                players = state.PlayerNames.Select(n => new PlayerEntry { Name = n }).ToList();
+        }
+        catch { }
+    }
+
+    private async Task SaveToLocalStorage()
+    {
+        if (!isNew) return;
+        try
+        {
+            var state = new SavedState
+            {
+                EventName = eventName,
+                EventDate = eventDate.ToString("yyyy-MM-dd"),
+                CourtNames = courtNames,
+                NumberOfRounds = numberOfRounds,
+                PlayerNames = players.Select(p => p.Name).ToList()
+            };
+            var json = System.Text.Json.JsonSerializer.Serialize(state);
+            await JS.InvokeVoidAsync("localStorage.setItem", StorageKey, json);
+        }
+        catch { }
+    }
+
+    private async Task ResetForm()
+    {
+        eventName = "Pickleball Session";
+        eventDate = DateTime.Today;
+        courtNames = new() { "Court 1", "Court 2" };
+        numberOfRounds = 5;
+        players = new();
+        newPlayerName = "";
+        validationError = null;
+        try { await JS.InvokeVoidAsync("localStorage.removeItem", StorageKey); } catch { }
+    }
+
+    private async Task AddCourt()
+    {
+        courtNames.Add($"Court {courtNames.Count + 1}");
+        await SaveToLocalStorage();
+    }
+
+    private async Task RemoveCourt(int index)
     {
         if (courtNames.Count > 1)
         {
             courtNames.RemoveAt(index);
+            await SaveToLocalStorage();
         }
     }
 
-    private void UpdateCourtName(int index, ChangeEventArgs e)
+    private async Task UpdateCourtName(int index, ChangeEventArgs e)
     {
         courtNames[index] = e.Value?.ToString() ?? $"Court {index + 1}";
+        await SaveToLocalStorage();
     }
 
-    private void AddPlayer()
+    private async Task AddPlayer()
     {
         if (string.IsNullOrWhiteSpace(newPlayerName)) return;
         players.Add(new PlayerEntry { Name = newPlayerName.Trim() });
         newPlayerName = "";
+        await SaveToLocalStorage();
     }
 
     private void HandleKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
         {
-            AddPlayer();
+            _ = AddPlayer();
         }
     }
 
-    private void RemovePlayer(int index)
+    private async Task RemovePlayer(int index)
     {
         players.RemoveAt(index);
+        await SaveToLocalStorage();
     }
 
-    private void UpdateName(int index, ChangeEventArgs e)
+    private async Task UpdateName(int index, ChangeEventArgs e)
     {
         players[index].Name = e.Value?.ToString() ?? "";
+        await SaveToLocalStorage();
     }
 
     private async Task GenerateSchedule()

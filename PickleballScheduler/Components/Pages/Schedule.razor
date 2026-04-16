@@ -14,7 +14,10 @@ else
     <div class="schedule-header">
         <h1 class="mb-1">@evt.Name</h1>
         <p class="text-muted mb-2">@evt.Date.ToString("MMMM d, yyyy") &middot; @evt.EventPlayers.Count players &middot; @courtNames.Count courts</p>
-        <button class="btn btn-outline-primary btn-sm no-print" @onclick="Print">Print Schedule</button>
+        <div class="no-print">
+            <a href="/event/@evt.Id/setup" class="btn btn-outline-secondary btn-sm me-2">Edit Setup</a>
+            <button class="btn btn-outline-primary btn-sm" @onclick="Print">Print Schedule</button>
+        </div>
     </div>
 
     @if (evt.Rounds.Count == 0)
