@@ -1,5 +1,6 @@
 @page "/"
 @inject EventService EventService
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 @rendermode InteractiveServer
 
@@ -23,14 +24,18 @@ else
     <div class="list-group">
         @foreach (var evt in events)
         {
-            <a href="/event/@evt.Id/schedule" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                <div>
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+                <a href="/event/@evt.Id/schedule" class="text-decoration-none flex-grow-1">
                     <strong>@evt.Name</strong>
                     <br />
                     <small class="text-muted">@evt.EventPlayers.Count players</small>
+                </a>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="text-muted">@evt.Date.ToString("MMM d, yyyy")</span>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => CopyEvent(evt.Id)"
+                            title="Copy players to new event">Copy</button>
                 </div>
-                <span class="text-muted">@evt.Date.ToString("MMM d, yyyy")</span>
-            </a>
+            </div>
         }
     </div>
 }
@@ -41,5 +46,24 @@ else
     protected override async Task OnInitializedAsync()
     {
         events = await EventService.GetAllAsync();
+    }
+
+    private async Task CopyEvent(int eventId)
+    {
+        var evt = await EventService.GetByIdAsync(eventId);
+        if (evt == null) return;
+
+        var state = new
+        {
+            EventName = evt.Name,
+            EventDate = DateTime.Today.ToString("yyyy-MM-dd"),
+            CourtNames = evt.GetCourtNamesList(),
+            NumberOfRounds = evt.Rounds.Count > 0 ? evt.Rounds.Count : evt.EventPlayers.Count - 1,
+            PlayerNames = evt.EventPlayers.Select(ep => ep.Player.Name).ToList()
+        };
+
+        var json = System.Text.Json.JsonSerializer.Serialize(state);
+        await JS.InvokeVoidAsync("localStorage.setItem", "pb-event-setup", json);
+        Nav.NavigateTo("/event/new");
     }
 }

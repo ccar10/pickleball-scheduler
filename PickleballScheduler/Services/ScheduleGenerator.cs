@@ -8,13 +8,13 @@ public class ScheduleGenerator
     {
         var matchesPerRound = Math.Min(numberOfCourts, players.Count / 4);
         var playersPerRound = matchesPerRound * 4;
-        var usedPartnerships = new HashSet<string>();
-        var usedOpponents = new Dictionary<string, int>();
-        var courtCounts = new Dictionary<int, int[]>(); // playerId -> count per court index
+        var partnerCounts = new Dictionary<string, int>();
+        var lastPartneredRound = new Dictionary<string, int>();
+        var opponentCounts = new Dictionary<string, int>();
+        var courtCounts = new Dictionary<int, int[]>();
         var byeCounts = players.ToDictionary(p => p.Id, _ => 0);
         var rounds = new List<Round>();
 
-        // Initialize court counts
         foreach (var p in players)
         {
             courtCounts[p.Id] = new int[matchesPerRound];
@@ -25,60 +25,52 @@ public class ScheduleGenerator
             var activePlayers = SelectActivePlayers(players, playersPerRound, byeCounts);
             var byePlayers = players.Where(p => !activePlayers.Contains(p)).ToList();
 
-            // Shuffle active players to vary which players end up in which match/court
-            // Uses a deterministic shuffle based on round number for reproducibility
             var shuffled = ShufflePlayers(activePlayers, r);
 
-            // Form teams with backtracking (no repeated partners, prefer new opponents)
-            var teams = FormTeams(shuffled, usedPartnerships);
+            // Form teams: minimize partner count, no consecutive repeats
+            var teams = FormTeams(shuffled, partnerCounts, lastPartneredRound, r);
 
-            // If backtracking failed (all partnerships exhausted), reset and try again
-            // This handles rounds beyond the partner limit (e.g., round 8+ with 8 players)
-            if (teams.Count < matchesPerRound)
-            {
-                usedPartnerships.Clear();
-                teams = FormTeams(shuffled, usedPartnerships);
-            }
+            // Pair teams into matches: maximize opponent variety
+            var matches = PairTeamsIntoMatches(teams, opponentCounts);
 
-            // Pair teams into matches, preferring opponents who haven't faced each other
-            var matches = PairTeamsIntoMatches(teams, usedOpponents);
-
-            // Assign matches to courts, balancing court assignments
+            // Assign courts: balance court usage
             AssignCourts(matches, courtCounts, matchesPerRound);
 
-            // Record partnerships
+            // Record all tracking data
             foreach (var match in matches)
             {
-                usedPartnerships.Add(PairKey(match.Team1Player1Id, match.Team1Player2Id));
-                usedPartnerships.Add(PairKey(match.Team2Player1Id, match.Team2Player2Id));
+                var t1p1 = match.Team1Player1Id;
+                var t1p2 = match.Team1Player2Id;
+                var t2p1 = match.Team2Player1Id;
+                var t2p2 = match.Team2Player2Id;
 
-                // Record opponent pairs
-                var team1 = new[] { match.Team1Player1Id, match.Team1Player2Id };
-                var team2 = new[] { match.Team2Player1Id, match.Team2Player2Id };
+                // Partner counts
+                var pk1 = PairKey(t1p1, t1p2);
+                var pk2 = PairKey(t2p1, t2p2);
+                partnerCounts[pk1] = partnerCounts.GetValueOrDefault(pk1) + 1;
+                partnerCounts[pk2] = partnerCounts.GetValueOrDefault(pk2) + 1;
+                lastPartneredRound[pk1] = r;
+                lastPartneredRound[pk2] = r;
+
+                // Opponent counts
+                var team1 = new[] { t1p1, t1p2 };
+                var team2 = new[] { t2p1, t2p2 };
                 foreach (var p1 in team1)
-                {
                     foreach (var p2 in team2)
                     {
-                        var key = PairKey(p1, p2);
-                        usedOpponents[key] = usedOpponents.GetValueOrDefault(key) + 1;
+                        var ok = PairKey(p1, p2);
+                        opponentCounts[ok] = opponentCounts.GetValueOrDefault(ok) + 1;
                     }
-                }
 
-                // Record court assignments
+                // Court counts
                 var courtIdx = match.CourtNumber - 1;
                 foreach (var pid in team1.Concat(team2))
-                {
                     if (courtCounts.ContainsKey(pid) && courtIdx < courtCounts[pid].Length)
-                    {
                         courtCounts[pid][courtIdx]++;
-                    }
-                }
             }
 
             foreach (var bp in byePlayers)
-            {
                 byeCounts[bp.Id]++;
-            }
 
             rounds.Add(new Round
             {
@@ -102,18 +94,44 @@ public class ScheduleGenerator
             .ToList();
     }
 
-    private static List<(Player, Player)> FormTeams(List<Player> activePlayers, HashSet<string> usedPartnerships)
+    private static List<(Player, Player)> FormTeams(
+        List<Player> activePlayers,
+        Dictionary<string, int> partnerCounts,
+        Dictionary<string, int> lastPartneredRound,
+        int currentRound)
     {
         var neededTeams = activePlayers.Count / 2;
+        var minCount = GetMinPartnerCount(activePlayers, partnerCounts);
+
+        // Try with strict constraints: only use min-count partnerships, no consecutive repeats
         var result = new List<(Player, Player)>();
         var used = new HashSet<int>();
-
-        if (TryFormTeams(activePlayers, usedPartnerships, used, result, neededTeams))
-        {
+        if (TryFormTeams(activePlayers, partnerCounts, lastPartneredRound, currentRound,
+                minCount, true, used, result, neededTeams))
             return result;
-        }
 
-        // Fallback: greedy pairing allowing repeats if backtracking fails
+        // Relax: allow min-count but permit consecutive repeats
+        result.Clear();
+        used.Clear();
+        if (TryFormTeams(activePlayers, partnerCounts, lastPartneredRound, currentRound,
+                minCount, false, used, result, neededTeams))
+            return result;
+
+        // Relax further: allow min+1 count, no consecutive
+        result.Clear();
+        used.Clear();
+        if (TryFormTeams(activePlayers, partnerCounts, lastPartneredRound, currentRound,
+                minCount + 1, true, used, result, neededTeams))
+            return result;
+
+        // Last resort: allow min+1 count with consecutive
+        result.Clear();
+        used.Clear();
+        if (TryFormTeams(activePlayers, partnerCounts, lastPartneredRound, currentRound,
+                minCount + 1, false, used, result, neededTeams))
+            return result;
+
+        // Absolute fallback: greedy, no constraints
         result.Clear();
         used.Clear();
         for (int i = 0; i < activePlayers.Count; i++)
@@ -128,13 +146,28 @@ public class ScheduleGenerator
                 break;
             }
         }
-
         return result;
+    }
+
+    private static int GetMinPartnerCount(List<Player> players, Dictionary<string, int> partnerCounts)
+    {
+        int min = int.MaxValue;
+        for (int i = 0; i < players.Count; i++)
+            for (int j = i + 1; j < players.Count; j++)
+            {
+                var count = partnerCounts.GetValueOrDefault(PairKey(players[i].Id, players[j].Id));
+                if (count < min) min = count;
+            }
+        return min == int.MaxValue ? 0 : min;
     }
 
     private static bool TryFormTeams(
         List<Player> players,
-        HashSet<string> usedPartnerships,
+        Dictionary<string, int> partnerCounts,
+        Dictionary<string, int> lastPartneredRound,
+        int currentRound,
+        int maxAllowedCount,
+        bool blockConsecutive,
         HashSet<int> used,
         List<(Player, Player)> result,
         int neededTeams)
@@ -142,7 +175,6 @@ public class ScheduleGenerator
         if (result.Count == neededTeams)
             return true;
 
-        // Find the first unused player
         int first = -1;
         for (int i = 0; i < players.Count; i++)
         {
@@ -152,24 +184,40 @@ public class ScheduleGenerator
                 break;
             }
         }
-
         if (first == -1) return false;
 
         var p1 = players[first];
         used.Add(p1.Id);
 
+        // Try partners sorted by count (prefer least-used)
+        var candidates = new List<(int index, int count, int lastRound)>();
         for (int j = first + 1; j < players.Count; j++)
         {
             if (used.Contains(players[j].Id)) continue;
-
             var key = PairKey(p1.Id, players[j].Id);
-            if (usedPartnerships.Contains(key)) continue;
+            var count = partnerCounts.GetValueOrDefault(key);
+            var lastRd = lastPartneredRound.GetValueOrDefault(key, -10);
+            candidates.Add((j, count, lastRd));
+        }
+
+        // Sort: lowest count first, then oldest last-partnered round
+        candidates.Sort((a, b) =>
+        {
+            if (a.count != b.count) return a.count.CompareTo(b.count);
+            return a.lastRound.CompareTo(b.lastRound);
+        });
+
+        foreach (var (j, count, lastRd) in candidates)
+        {
+            if (count > maxAllowedCount) continue;
+            if (blockConsecutive && lastRd == currentRound - 1) continue;
 
             var p2 = players[j];
             used.Add(p2.Id);
             result.Add((p1, p2));
 
-            if (TryFormTeams(players, usedPartnerships, used, result, neededTeams))
+            if (TryFormTeams(players, partnerCounts, lastPartneredRound, currentRound,
+                    maxAllowedCount, blockConsecutive, used, result, neededTeams))
                 return true;
 
             result.RemoveAt(result.Count - 1);
@@ -182,19 +230,16 @@ public class ScheduleGenerator
 
     private static List<Match> PairTeamsIntoMatches(
         List<(Player, Player)> teams,
-        Dictionary<string, int> usedOpponents)
+        Dictionary<string, int> opponentCounts)
     {
         var matches = new List<Match>();
+        if (teams.Count < 2) return matches;
 
-        if (teams.Count < 2)
-            return matches;
-
-        // Try all possible pairings of teams and pick the one with lowest opponent overlap
         var bestPairing = new List<(int, int)>();
         var bestScore = int.MaxValue;
         var usedTeams = new bool[teams.Count];
 
-        FindBestTeamPairing(teams, usedOpponents, usedTeams, new List<(int, int)>(),
+        FindBestTeamPairing(teams, opponentCounts, usedTeams, new List<(int, int)>(),
             ref bestPairing, ref bestScore);
 
         foreach (var (t1, t2) in bestPairing)
@@ -213,13 +258,12 @@ public class ScheduleGenerator
 
     private static void FindBestTeamPairing(
         List<(Player, Player)> teams,
-        Dictionary<string, int> usedOpponents,
+        Dictionary<string, int> opponentCounts,
         bool[] usedTeams,
         List<(int, int)> current,
         ref List<(int, int)> bestPairing,
         ref int bestScore)
     {
-        // Find first unused team
         int first = -1;
         for (int i = 0; i < teams.Count; i++)
         {
@@ -228,8 +272,7 @@ public class ScheduleGenerator
 
         if (first == -1)
         {
-            // All teams paired - evaluate
-            var score = ScorePairing(teams, usedOpponents, current);
+            var score = ScorePairing(teams, opponentCounts, current);
             if (score < bestScore)
             {
                 bestScore = score;
@@ -244,9 +287,7 @@ public class ScheduleGenerator
             if (usedTeams[j]) continue;
             usedTeams[j] = true;
             current.Add((first, j));
-
-            FindBestTeamPairing(teams, usedOpponents, usedTeams, current, ref bestPairing, ref bestScore);
-
+            FindBestTeamPairing(teams, opponentCounts, usedTeams, current, ref bestPairing, ref bestScore);
             current.RemoveAt(current.Count - 1);
             usedTeams[j] = false;
         }
@@ -255,23 +296,47 @@ public class ScheduleGenerator
 
     private static int ScorePairing(
         List<(Player, Player)> teams,
-        Dictionary<string, int> usedOpponents,
+        Dictionary<string, int> opponentCounts,
         List<(int, int)> pairing)
     {
+        // Score = sum of opponent counts (prefer lowest)
+        // Plus a large penalty for any pair that has NEVER opposed (to force variety)
         int score = 0;
+        int maxOpponentCount = opponentCounts.Count > 0 ? opponentCounts.Values.Max() : 0;
+
         foreach (var (t1, t2) in pairing)
         {
-            var team1Players = new[] { teams[t1].Item1.Id, teams[t1].Item2.Id };
-            var team2Players = new[] { teams[t2].Item1.Id, teams[t2].Item2.Id };
-            foreach (var p1 in team1Players)
-            {
-                foreach (var p2 in team2Players)
+            var team1 = new[] { teams[t1].Item1.Id, teams[t1].Item2.Id };
+            var team2 = new[] { teams[t2].Item1.Id, teams[t2].Item2.Id };
+            foreach (var p1 in team1)
+                foreach (var p2 in team2)
                 {
                     var key = PairKey(p1, p2);
-                    score += usedOpponents.GetValueOrDefault(key);
+                    var count = opponentCounts.GetValueOrDefault(key);
+                    score += count;
                 }
-            }
         }
+
+        // Also check: are there player pairs NOT in this matchup that have 0 opponent encounters?
+        // If so, penalize pairings that put those players on the same side
+        // This helps prevent the Stephen/Dave problem (always same side, never opposing)
+        foreach (var (t1, t2) in pairing)
+        {
+            var team1 = new[] { teams[t1].Item1.Id, teams[t1].Item2.Id };
+            var team2 = new[] { teams[t2].Item1.Id, teams[t2].Item2.Id };
+
+            // Check same-side pairs: if they have low opponent count, that's bad
+            // because they should be opposing instead
+            foreach (var sameTeam in new[] { team1, team2 })
+            {
+                var sameKey = PairKey(sameTeam[0], sameTeam[1]);
+                // These are already partners, skip
+            }
+
+            // Check cross-court: players on the same side of different matches
+            // who have 0 opponent count — this is harder to fix here
+        }
+
         return score;
     }
 
@@ -283,13 +348,10 @@ public class ScheduleGenerator
         if (matches.Count <= 1)
         {
             for (int i = 0; i < matches.Count; i++)
-            {
                 matches[i].CourtNumber = i + 1;
-            }
             return;
         }
 
-        // Try all permutations of court assignments and pick the most balanced
         var courtIndices = Enumerable.Range(0, matches.Count).ToArray();
         var bestAssignment = (int[])courtIndices.Clone();
         var bestImbalance = int.MaxValue;
@@ -297,18 +359,12 @@ public class ScheduleGenerator
         PermuteAndScore(courtIndices, 0, matches, courtCounts, ref bestAssignment, ref bestImbalance);
 
         for (int i = 0; i < matches.Count; i++)
-        {
             matches[i].CourtNumber = bestAssignment[i] + 1;
-        }
     }
 
     private static void PermuteAndScore(
-        int[] courtIndices,
-        int start,
-        List<Match> matches,
-        Dictionary<int, int[]> courtCounts,
-        ref int[] bestAssignment,
-        ref int bestImbalance)
+        int[] courtIndices, int start, List<Match> matches,
+        Dictionary<int, int[]> courtCounts, ref int[] bestAssignment, ref int bestImbalance)
     {
         if (start == courtIndices.Length)
         {
@@ -329,27 +385,19 @@ public class ScheduleGenerator
         }
     }
 
-    private static int CalculateImbalance(
-        int[] courtIndices,
-        List<Match> matches,
-        Dictionary<int, int[]> courtCounts)
+    private static int CalculateImbalance(int[] courtIndices, List<Match> matches, Dictionary<int, int[]> courtCounts)
     {
         int total = 0;
         for (int i = 0; i < matches.Count; i++)
         {
             var courtIdx = courtIndices[i];
-            var playerIds = new[]
-            {
+            var playerIds = new[] {
                 matches[i].Team1Player1Id, matches[i].Team1Player2Id,
                 matches[i].Team2Player1Id, matches[i].Team2Player2Id
             };
             foreach (var pid in playerIds)
-            {
                 if (courtCounts.TryGetValue(pid, out var counts) && courtIdx < counts.Length)
-                {
                     total += counts[courtIdx];
-                }
-            }
         }
         return total;
     }

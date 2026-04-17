@@ -23,3 +23,4 @@ PickleballScheduler/Data/*.db-wal
 # Rider, VS Code
 .idea/
 .vscode/
+deploy/

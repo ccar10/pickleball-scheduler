@@ -233,11 +233,11 @@
         await SaveToLocalStorage();
     }
 
-    private void HandleKeyDown(KeyboardEventArgs e)
+    private async Task HandleKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
         {
-            _ = AddPlayer();
+            await AddPlayer();
         }
     }
 
@@ -303,6 +303,9 @@
 
         var rounds = ScheduleGenerator.Generate(dbPlayers, numberOfCourts, numberOfRounds);
         await EventService.SaveScheduleAsync(evt.Id, rounds);
+
+        // Clear local storage so next new event starts fresh
+        try { await JS.InvokeVoidAsync("localStorage.removeItem", StorageKey); } catch { }
 
         isGenerating = false;
         Nav.NavigateTo($"/event/{evt.Id}/schedule");
