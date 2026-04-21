@@ -34,6 +34,8 @@ else
                     <span class="text-muted">@evt.Date.ToString("MMM d, yyyy")</span>
                     <button class="btn btn-outline-secondary btn-sm" @onclick="() => CopyEvent(evt.Id)"
                             title="Copy players to new event">Copy</button>
+                    <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteEvent(evt)"
+                            title="Delete event">Delete</button>
                 </div>
             </div>
         }
@@ -45,6 +47,15 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        events = await EventService.GetAllAsync();
+    }
+
+    private async Task DeleteEvent(Event evt)
+    {
+        var confirmed = await JS.InvokeAsync<bool>("pbHelpers.confirm", $"Delete \"{evt.Name}\"? This cannot be undone.");
+        if (!confirmed) return;
+
+        await EventService.DeleteAsync(evt.Id);
         events = await EventService.GetAllAsync();
     }
 

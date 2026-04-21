@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash *)",
+      "Bash(dotnet --version)",
+      "Bash(dotnet --list-sdks)",
+      "Bash(dotnet new *)",
+      "Bash(dotnet add *)",
+      "Bash(dotnet build *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(dotnet ef *)",
+      "Bash(dotnet test *)",
+      "Bash(taskkill //F //IM PickleballScheduler.exe)",
+      "Bash(az --version)",
+      "Bash(az account show *)",
+      "Bash(az webapp list *)",
+      "Bash(dotnet publish *)",
+      "Bash(az webapp *)",
+      "Bash(unzip -o /tmp/pb-logs.zip -d /tmp/pb-logs)",
+      "Read(//tmp/**)",
+      "Bash(ls *)",
+      "Bash(zip -r /tmp/pb-deploy.zip .)",
+      "Bash(powershell -Command \"Compress-Archive -Path '.' -DestinationPath 'C:/Users/ccaruso/AppData/Local/Temp/pb-deploy.zip' -Force\")",
+      "Bash(az group delete *)",
+      "Bash(cp -r \"C:/Users/ccaruso/Dropbox/round-robin/deploy\" \"C:/Users/ccaruso/AppData/Local/Temp/pb-deploy\")",
+      "Bash(rm -rf \"C:/Users/ccaruso/AppData/Local/Temp/pb-deploy\")",
+      "Bash(unzip -o /tmp/pb-logs2.zip -d /tmp/pb-logs2)",
+      "Bash(cat /tmp/pb-logs2/LogFiles/*docker.log)",
+      "Bash(unzip -o /tmp/pb-logs3.zip -d /tmp/pb-logs3)",
+      "Bash(cat /tmp/pb-logs3/LogFiles/*default_docker.log)",
+      "Bash(curl *)"
+    ]
+  }
+}

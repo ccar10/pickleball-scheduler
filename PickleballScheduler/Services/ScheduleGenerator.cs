@@ -100,132 +100,76 @@ public class ScheduleGenerator
         Dictionary<string, int> lastPartneredRound,
         int currentRound)
     {
-        var neededTeams = activePlayers.Count / 2;
-        var minCount = GetMinPartnerCount(activePlayers, partnerCounts);
-
-        // Try with strict constraints: only use min-count partnerships, no consecutive repeats
-        var result = new List<(Player, Player)>();
-        var used = new HashSet<int>();
-        if (TryFormTeams(activePlayers, partnerCounts, lastPartneredRound, currentRound,
-                minCount, true, used, result, neededTeams))
-            return result;
-
-        // Relax: allow min-count but permit consecutive repeats
-        result.Clear();
-        used.Clear();
-        if (TryFormTeams(activePlayers, partnerCounts, lastPartneredRound, currentRound,
-                minCount, false, used, result, neededTeams))
-            return result;
-
-        // Relax further: allow min+1 count, no consecutive
-        result.Clear();
-        used.Clear();
-        if (TryFormTeams(activePlayers, partnerCounts, lastPartneredRound, currentRound,
-                minCount + 1, true, used, result, neededTeams))
-            return result;
-
-        // Last resort: allow min+1 count with consecutive
-        result.Clear();
-        used.Clear();
-        if (TryFormTeams(activePlayers, partnerCounts, lastPartneredRound, currentRound,
-                minCount + 1, false, used, result, neededTeams))
-            return result;
-
-        // Absolute fallback: greedy, no constraints
-        result.Clear();
-        used.Clear();
-        for (int i = 0; i < activePlayers.Count; i++)
-        {
-            if (used.Contains(activePlayers[i].Id)) continue;
-            for (int j = i + 1; j < activePlayers.Count; j++)
-            {
-                if (used.Contains(activePlayers[j].Id)) continue;
-                result.Add((activePlayers[i], activePlayers[j]));
-                used.Add(activePlayers[i].Id);
-                used.Add(activePlayers[j].Id);
-                break;
-            }
-        }
-        return result;
+        // Globally minimize total pair cost across the round's perfect matching.
+        // Cost per pair is quadratic in prior-partner count, so two 1-count edges
+        // (cost 2) beat one 2-count edge (cost 4) — preventing the greedy trap
+        // where one pair doubles up while a complementary pair is never used.
+        var best = new List<(Player, Player)>();
+        long bestScore = long.MaxValue;
+        var current = new List<(Player, Player)>(activePlayers.Count / 2);
+        var used = new bool[activePlayers.Count];
+        SearchTeams(activePlayers, partnerCounts, lastPartneredRound, currentRound,
+            used, current, 0L, ref bestScore, ref best);
+        return best;
     }
 
-    private static int GetMinPartnerCount(List<Player> players, Dictionary<string, int> partnerCounts)
-    {
-        int min = int.MaxValue;
-        for (int i = 0; i < players.Count; i++)
-            for (int j = i + 1; j < players.Count; j++)
-            {
-                var count = partnerCounts.GetValueOrDefault(PairKey(players[i].Id, players[j].Id));
-                if (count < min) min = count;
-            }
-        return min == int.MaxValue ? 0 : min;
-    }
-
-    private static bool TryFormTeams(
+    private static void SearchTeams(
         List<Player> players,
         Dictionary<string, int> partnerCounts,
         Dictionary<string, int> lastPartneredRound,
         int currentRound,
-        int maxAllowedCount,
-        bool blockConsecutive,
-        HashSet<int> used,
-        List<(Player, Player)> result,
-        int neededTeams)
+        bool[] used,
+        List<(Player, Player)> current,
+        long currentScore,
+        ref long bestScore,
+        ref List<(Player, Player)> best)
     {
-        if (result.Count == neededTeams)
-            return true;
+        if (currentScore >= bestScore) return;
 
         int first = -1;
         for (int i = 0; i < players.Count; i++)
         {
-            if (!used.Contains(players[i].Id))
-            {
-                first = i;
-                break;
-            }
+            if (!used[i]) { first = i; break; }
         }
-        if (first == -1) return false;
+        if (first == -1)
+        {
+            bestScore = currentScore;
+            best = new List<(Player, Player)>(current);
+            return;
+        }
 
         var p1 = players[first];
-        used.Add(p1.Id);
+        used[first] = true;
 
-        // Try partners sorted by count (prefer least-used)
-        var candidates = new List<(int index, int count, int lastRound)>();
+        var candidates = new List<(int index, long cost)>();
         for (int j = first + 1; j < players.Count; j++)
         {
-            if (used.Contains(players[j].Id)) continue;
+            if (used[j]) continue;
             var key = PairKey(p1.Id, players[j].Id);
             var count = partnerCounts.GetValueOrDefault(key);
             var lastRd = lastPartneredRound.GetValueOrDefault(key, -10);
-            candidates.Add((j, count, lastRd));
+            candidates.Add((j, PairCost(count, lastRd, currentRound)));
+        }
+        candidates.Sort((a, b) => a.cost.CompareTo(b.cost));
+
+        foreach (var (j, cost) in candidates)
+        {
+            used[j] = true;
+            current.Add((p1, players[j]));
+            SearchTeams(players, partnerCounts, lastPartneredRound, currentRound,
+                used, current, currentScore + cost, ref bestScore, ref best);
+            current.RemoveAt(current.Count - 1);
+            used[j] = false;
         }
 
-        // Sort: lowest count first, then oldest last-partnered round
-        candidates.Sort((a, b) =>
-        {
-            if (a.count != b.count) return a.count.CompareTo(b.count);
-            return a.lastRound.CompareTo(b.lastRound);
-        });
+        used[first] = false;
+    }
 
-        foreach (var (j, count, lastRd) in candidates)
-        {
-            if (count > maxAllowedCount) continue;
-            if (blockConsecutive && lastRd == currentRound - 1) continue;
-
-            var p2 = players[j];
-            used.Add(p2.Id);
-            result.Add((p1, p2));
-
-            if (TryFormTeams(players, partnerCounts, lastPartneredRound, currentRound,
-                    maxAllowedCount, blockConsecutive, used, result, neededTeams))
-                return true;
-
-            result.RemoveAt(result.Count - 1);
-            used.Remove(p2.Id);
-        }
-
-        used.Remove(p1.Id);
-        return false;
+    private static long PairCost(int count, int lastPartneredRound, int currentRound)
+    {
+        long cost = (long)count * count;
+        if (lastPartneredRound == currentRound - 1) cost += 1000;
+        return cost;
     }
 
     private static List<Match> PairTeamsIntoMatches(

@@ -65,7 +65,7 @@
     <div class="col-md-6">
         <h5>Players <span class="text-muted fs-6">(@players.Count)</span></h5>
 
-        <div class="list-group mb-3" style="max-height: 350px; overflow-y: auto;">
+        <div class="list-group mb-3" style="max-height: 350px; overflow-y: auto;" @ref="playerListRef">
             @for (int i = 0; i < players.Count; i++)
             {
                 var index = i;
@@ -81,7 +81,7 @@
 
         <div class="input-group mb-3">
             <input type="text" class="form-control" placeholder="Add player name..." @bind="newPlayerName"
-                   @onkeydown="HandleKeyDown" />
+                   @bind:event="oninput" @onkeydown="HandleKeyDown" />
             <button class="btn btn-outline-secondary" @onclick="AddPlayer">Add</button>
         </div>
 
@@ -108,6 +108,8 @@
     private string newPlayerName = "";
     private string? validationError;
     private bool isGenerating;
+    private ElementReference playerListRef;
+    private bool scrollPlayerListOnNextRender;
 
     private const string StorageKey = "pb-event-setup";
 
@@ -150,6 +152,12 @@
         {
             await LoadFromLocalStorage();
             StateHasChanged();
+        }
+
+        if (scrollPlayerListOnNextRender)
+        {
+            scrollPlayerListOnNextRender = false;
+            try { await JS.InvokeVoidAsync("pbHelpers.scrollToBottom", playerListRef); } catch { }
         }
     }
 
@@ -230,6 +238,7 @@
         if (string.IsNullOrWhiteSpace(newPlayerName)) return;
         players.Add(new PlayerEntry { Name = newPlayerName.Trim() });
         newPlayerName = "";
+        scrollPlayerListOnNextRender = true;
         await SaveToLocalStorage();
     }
 
