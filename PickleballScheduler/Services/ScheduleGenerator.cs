@@ -20,15 +20,29 @@ public class ScheduleGenerator
             courtCounts[p.Id] = new int[matchesPerRound];
         }
 
+        // When every player plays every round and we have an even count, a perfect
+        // 1-factorization exists for the first n-1 rounds (circle method). Pre-compute
+        // it so rounds never collide — the per-round greedy can't see far enough ahead
+        // to guarantee this.
+        var canUseCircle = playersPerRound == players.Count && players.Count % 2 == 0;
+        var circleRounds = canUseCircle ? Math.Min(numberOfRounds, players.Count - 1) : 0;
+        var circleSchedule = circleRounds > 0 ? CircleMethodSchedule(players, circleRounds) : null;
+
         for (int r = 0; r < numberOfRounds; r++)
         {
             var activePlayers = SelectActivePlayers(players, playersPerRound, byeCounts);
             var byePlayers = players.Where(p => !activePlayers.Contains(p)).ToList();
 
-            var shuffled = ShufflePlayers(activePlayers, r);
-
-            // Form teams: minimize partner count, no consecutive repeats
-            var teams = FormTeams(shuffled, partnerCounts, lastPartneredRound, r);
+            List<(Player, Player)> teams;
+            if (circleSchedule != null && r < circleRounds)
+            {
+                teams = circleSchedule[r];
+            }
+            else
+            {
+                var shuffled = ShufflePlayers(activePlayers, r);
+                teams = FormTeams(shuffled, partnerCounts, lastPartneredRound, r);
+            }
 
             // Pair teams into matches: maximize opponent variety
             var matches = PairTeamsIntoMatches(teams, opponentCounts);
@@ -360,4 +374,34 @@ public class ScheduleGenerator
 
     internal static string PairKey(int a, int b)
         => a < b ? $"{a}-{b}" : $"{b}-{a}";
+
+    // Circle method: produces a 1-factorization of the complete graph on `players.Count`
+    // vertices (must be even). One player is held fixed; the other n-1 rotate around a
+    // circle. Across n-1 rounds, every pair partners exactly once.
+    private static List<List<(Player, Player)>> CircleMethodSchedule(List<Player> players, int numRounds)
+    {
+        int n = players.Count;
+        var fixedPlayer = players[0];
+        var rotating = new List<Player>(players.Skip(1));
+        var schedule = new List<List<(Player, Player)>>(numRounds);
+
+        for (int r = 0; r < numRounds; r++)
+        {
+            var arr = new List<Player>(n) { fixedPlayer };
+            arr.AddRange(rotating);
+
+            var teams = new List<(Player, Player)>(n / 2);
+            for (int i = 0; i < n / 2; i++)
+            {
+                teams.Add((arr[i], arr[n - 1 - i]));
+            }
+            schedule.Add(teams);
+
+            var last = rotating[^1];
+            rotating.RemoveAt(rotating.Count - 1);
+            rotating.Insert(0, last);
+        }
+
+        return schedule;
+    }
 }

@@ -1,0 +1,14 @@
+name: Keep Azure Site Warm
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping site
+        run: curl -sSfL --max-time 60 --retry 3 https://pb-maker.azurewebsites.net/ > /dev/null

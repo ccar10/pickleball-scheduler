@@ -20,6 +20,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<EventService>();
+builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<ScheduleGenerator>();
 
 var app = builder.Build();
@@ -47,6 +48,21 @@ using (var scope = app.Services.CreateScope())
         // Schema mismatch — recreate from scratch (data is ephemeral)
         db.Database.EnsureDeleted();
         db.Database.Migrate();
+    }
+
+    var guest = db.Users.FirstOrDefault(u => u.Name == UserService.GuestName);
+    if (guest == null)
+    {
+        guest = new PickleballScheduler.Models.User { Name = UserService.GuestName };
+        db.Users.Add(guest);
+        db.SaveChanges();
+    }
+
+    var orphans = db.Events.Where(e => e.UserId == null).ToList();
+    if (orphans.Count > 0)
+    {
+        foreach (var e in orphans) e.UserId = guest.Id;
+        db.SaveChanges();
     }
 }
 

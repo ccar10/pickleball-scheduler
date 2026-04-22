@@ -16,6 +16,13 @@ public class EventService
             .OrderByDescending(e => e.Date)
             .ToListAsync();
 
+    public async Task<List<Event>> GetByUserAsync(int userId)
+        => await _db.Events
+            .Include(e => e.EventPlayers)
+            .Where(e => e.UserId == userId)
+            .OrderByDescending(e => e.Date)
+            .ToListAsync();
+
     public async Task<Event?> GetByIdAsync(int id)
         => await _db.Events
             .Include(e => e.EventPlayers).ThenInclude(ep => ep.Player)
@@ -26,14 +33,15 @@ public class EventService
             .Include(e => e.Rounds).ThenInclude(r => r.Byes).ThenInclude(b => b.Player)
             .FirstOrDefaultAsync(e => e.Id == id);
 
-    public async Task<Event> CreateAsync(string name, DateTime date, int courts, string courtNames)
+    public async Task<Event> CreateAsync(string name, DateTime date, int courts, string courtNames, int? userId)
     {
         var evt = new Event
         {
             Name = name,
             Date = date,
             NumberOfCourts = courts,
-            CourtNames = courtNames
+            CourtNames = courtNames,
+            UserId = userId
         };
         _db.Events.Add(evt);
         await _db.SaveChangesAsync();

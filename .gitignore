@@ -1,4 +1,6 @@
 .superpowers/
+.claude/
+table*.png
 
 # .NET build artifacts
 bin/

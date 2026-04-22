@@ -1,53 +1,256 @@
 @page "/"
 @inject EventService EventService
+@inject UserService UserService
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @rendermode InteractiveServer
 
 <PageTitle>Pickleball Scheduler</PageTitle>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1>Events</h1>
-    <a href="/event/new" class="btn btn-success">+ New Event</a>
-</div>
-
-@if (events == null)
+@if (!ready)
 {
     <p>Loading...</p>
 }
-else if (events.Count == 0)
+else if (currentUser == null)
 {
-    <div class="alert alert-info">No events yet. Create one to get started!</div>
+    <h1 class="mb-3">Who's scheduling?</h1>
+
+    @if (allUsers.Count > 0)
+    {
+        <div class="mb-3">
+            <label class="form-label">Pick a name</label>
+            <select class="form-select" @bind="selectedUserId" @bind:after="SelectExistingUser">
+                <option value="0">-- choose --</option>
+                @foreach (var u in allUsers)
+                {
+                    <option value="@u.Id">@u.Name</option>
+                }
+            </select>
+        </div>
+    }
+
+    <div class="mb-3">
+        <label class="form-label">Or add a new name</label>
+        <div class="input-group">
+            <input type="text" class="form-control" placeholder="New name..." @bind="newUserName"
+                   @bind:event="oninput" @onkeydown="HandleAddUserKeyDown" />
+            <button class="btn btn-success" @onclick="AddUser" disabled="@string.IsNullOrWhiteSpace(newUserName)">Add</button>
+        </div>
+    </div>
+
+    @if (allUsers.Any(u => u.Name != UserService.GuestName))
+    {
+        <div class="mb-3">
+            <button class="btn btn-link btn-sm p-0" @onclick="() => showManage = !showManage">
+                @(showManage ? "Hide manage users" : "Manage users")
+            </button>
+            @if (showManage)
+            {
+                <div class="list-group mt-2">
+                    @foreach (var u in allUsers.Where(u => u.Name != UserService.GuestName))
+                    {
+                        <div class="list-group-item py-2">
+                            <div class="d-flex justify-content-between align-items-center gap-2">
+                                @if (editingUserId == u.Id)
+                                {
+                                    <input type="text" class="form-control form-control-sm" @bind="editingName"
+                                           @bind:event="oninput"
+                                           @onkeydown="@(e => HandleRenameKeyDown(e, u))"
+                                           @ref="editInputRef" />
+                                    <button class="btn btn-sm btn-primary" @onclick="() => SaveRename(u)">Save</button>
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="CancelRename">Cancel</button>
+                                }
+                                else
+                                {
+                                    <span role="button" class="flex-grow-1 text-decoration-underline"
+                                          @onclick="() => StartRename(u)" title="Click to rename">@u.Name</span>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteUser(u)">Delete</button>
+                                }
+                            </div>
+                            @if (editingUserId == u.Id && !string.IsNullOrEmpty(renameError))
+                            {
+                                <div class="text-danger small mt-1">@renameError</div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
 }
 else
 {
-    <div class="list-group">
-        @foreach (var evt in events)
-        {
-            <div class="list-group-item d-flex justify-content-between align-items-center">
-                <a href="/event/@evt.Id/schedule" class="text-decoration-none flex-grow-1">
-                    <strong>@evt.Name</strong>
-                    <br />
-                    <small class="text-muted">@evt.EventPlayers.Count players</small>
-                </a>
-                <div class="d-flex align-items-center gap-3">
-                    <span class="text-muted">@evt.Date.ToString("MMM d, yyyy")</span>
-                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => CopyEvent(evt.Id)"
-                            title="Copy players to new event">Copy</button>
-                    <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteEvent(evt)"
-                            title="Delete event">Delete</button>
-                </div>
-            </div>
-        }
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="mb-0">@currentUser.Name's Events</h1>
+        <div class="d-flex align-items-center gap-2">
+            <a href="/event/new" class="btn btn-success">+ New Event</a>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="SwitchUser">Switch user</button>
+        </div>
     </div>
+
+    @if (events == null || events.Count == 0)
+    {
+        <div class="alert alert-info">No events yet. Create one to get started!</div>
+    }
+    else
+    {
+        <div class="list-group">
+            @foreach (var evt in events)
+            {
+                <div class="list-group-item d-flex justify-content-between align-items-center">
+                    <a href="/event/@evt.Id/schedule" class="text-decoration-none flex-grow-1">
+                        <strong>@evt.Name</strong>
+                        <br />
+                        <small class="text-muted">@evt.EventPlayers.Count players</small>
+                    </a>
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="text-muted">@evt.Date.ToString("MMM d, yyyy")</span>
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="() => CopyEvent(evt.Id)"
+                                title="Copy players to new event">Copy</button>
+                        <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteEvent(evt)"
+                                title="Delete event">Delete</button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
 }
 
 @code {
-    private List<Event>? events;
+    private const string CurrentUserKey = "pb-current-user-id";
 
-    protected override async Task OnInitializedAsync()
+    private bool ready;
+    private List<User> allUsers = new();
+    private User? currentUser;
+    private List<Event>? events;
+    private int selectedUserId;
+    private string newUserName = "";
+    private bool showManage;
+    private int? editingUserId;
+    private string editingName = "";
+    private string? renameError;
+    private ElementReference editInputRef;
+    private bool focusEditNext;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        events = await EventService.GetAllAsync();
+        if (focusEditNext)
+        {
+            focusEditNext = false;
+            try { await editInputRef.FocusAsync(); } catch { }
+        }
+
+        if (!firstRender) return;
+
+        allUsers = await UserService.GetAllAsync();
+
+        int? storedId = null;
+        try
+        {
+            var idStr = await JS.InvokeAsync<string?>("localStorage.getItem", CurrentUserKey);
+            if (int.TryParse(idStr, out var id)) storedId = id;
+        }
+        catch { }
+
+        if (storedId.HasValue)
+        {
+            currentUser = await UserService.GetByIdAsync(storedId.Value);
+            if (currentUser != null)
+                events = await EventService.GetByUserAsync(currentUser.Id);
+            else
+                await JS.InvokeVoidAsync("localStorage.removeItem", CurrentUserKey);
+        }
+
+        ready = true;
+        StateHasChanged();
+    }
+
+    private async Task SelectExistingUser()
+    {
+        if (selectedUserId <= 0) return;
+        await SetCurrentUser(selectedUserId);
+    }
+
+    private async Task AddUser()
+    {
+        if (string.IsNullOrWhiteSpace(newUserName)) return;
+        var user = await UserService.GetOrCreateAsync(newUserName);
+        newUserName = "";
+        await SetCurrentUser(user.Id);
+    }
+
+    private async Task HandleAddUserKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await AddUser();
+    }
+
+    private async Task SetCurrentUser(int userId)
+    {
+        try { await JS.InvokeVoidAsync("localStorage.setItem", CurrentUserKey, userId.ToString()); } catch { }
+        currentUser = await UserService.GetByIdAsync(userId);
+        if (currentUser != null)
+            events = await EventService.GetByUserAsync(currentUser.Id);
+    }
+
+    private async Task SwitchUser()
+    {
+        try { await JS.InvokeVoidAsync("localStorage.removeItem", CurrentUserKey); } catch { }
+        currentUser = null;
+        events = null;
+        selectedUserId = 0;
+        allUsers = await UserService.GetAllAsync();
+    }
+
+    private void StartRename(User user)
+    {
+        editingUserId = user.Id;
+        editingName = user.Name;
+        renameError = null;
+        focusEditNext = true;
+    }
+
+    private void CancelRename()
+    {
+        editingUserId = null;
+        editingName = "";
+        renameError = null;
+    }
+
+    private async Task SaveRename(User user)
+    {
+        var (ok, error) = await UserService.RenameAsync(user.Id, editingName);
+        if (!ok)
+        {
+            renameError = error;
+            return;
+        }
+        editingUserId = null;
+        editingName = "";
+        renameError = null;
+        allUsers = await UserService.GetAllAsync();
+        if (currentUser != null && currentUser.Id == user.Id)
+            currentUser = await UserService.GetByIdAsync(user.Id);
+    }
+
+    private async Task HandleRenameKeyDown(KeyboardEventArgs e, User user)
+    {
+        if (e.Key == "Enter") await SaveRename(user);
+        else if (e.Key == "Escape") CancelRename();
+    }
+
+    private async Task DeleteUser(User user)
+    {
+        var eventCount = (await EventService.GetByUserAsync(user.Id)).Count;
+        var msg = eventCount > 0
+            ? $"Delete {user.Name}? Their {eventCount} event(s) will move to Guest."
+            : $"Delete {user.Name}?";
+
+        var confirmed = await JS.InvokeAsync<bool>("pbHelpers.confirm", msg);
+        if (!confirmed) return;
+
+        await UserService.DeleteAsync(user.Id);
+        allUsers = await UserService.GetAllAsync();
+        if (selectedUserId == user.Id) selectedUserId = 0;
     }
 
     private async Task DeleteEvent(Event evt)
@@ -56,7 +259,8 @@ else
         if (!confirmed) return;
 
         await EventService.DeleteAsync(evt.Id);
-        events = await EventService.GetAllAsync();
+        if (currentUser != null)
+            events = await EventService.GetByUserAsync(currentUser.Id);
     }
 
     private async Task CopyEvent(int eventId)

@@ -13,9 +13,16 @@ public class AppDbContext : DbContext
     public DbSet<Round> Rounds => Set<Round>();
     public DbSet<Match> Matches => Set<Match>();
     public DbSet<Bye> Byes => Set<Bye>();
+    public DbSet<User> Users => Set<User>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Event>()
+            .HasOne(e => e.User)
+            .WithMany()
+            .HasForeignKey(e => e.UserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         modelBuilder.Entity<EventPlayer>()
             .HasKey(ep => new { ep.EventId, ep.PlayerId });
 

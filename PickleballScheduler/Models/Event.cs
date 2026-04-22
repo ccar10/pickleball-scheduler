@@ -7,6 +7,8 @@ public class Event
     public DateTime Date { get; set; } = DateTime.Today;
     public int NumberOfCourts { get; set; } = 1;
     public string CourtNames { get; set; } = "";
+    public int? UserId { get; set; }
+    public User? User { get; set; }
     public List<EventPlayer> EventPlayers { get; set; } = new();
     public List<Round> Rounds { get; set; } = new();
 

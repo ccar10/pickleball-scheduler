@@ -289,7 +289,14 @@
         Event evt;
         if (isNew)
         {
-            evt = await EventService.CreateAsync(eventName, eventDate, numberOfCourts, courtNamesStr);
+            int? userId = null;
+            try
+            {
+                var idStr = await JS.InvokeAsync<string?>("localStorage.getItem", "pb-current-user-id");
+                if (int.TryParse(idStr, out var id)) userId = id;
+            }
+            catch { }
+            evt = await EventService.CreateAsync(eventName, eventDate, numberOfCourts, courtNamesStr, userId);
         }
         else
         {
