@@ -39,9 +39,6 @@
 .schedule-sheet .sheet-logo {
     height: 40px;
     width: auto;
-    background: #fff;
-    border-radius: 4px;
-    padding: 4px 8px;
     justify-self: start;
 }
 
