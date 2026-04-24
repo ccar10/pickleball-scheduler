@@ -11,13 +11,9 @@
 }
 else
 {
-    <div class="schedule-header">
-        <h1 class="mb-1">@evt.Name</h1>
-        <p class="text-muted mb-2">@evt.Date.ToString("MMMM d, yyyy") &middot; @evt.EventPlayers.Count players &middot; @courtNames.Count courts</p>
-        <div class="no-print">
-            <a href="/event/@evt.Id/setup" class="btn btn-outline-secondary btn-sm me-2">Edit Setup</a>
-            <button class="btn btn-outline-primary btn-sm" @onclick="Print">Print Schedule</button>
-        </div>
+    <div class="no-print mb-3">
+        <a href="/event/@evt.Id/setup" class="btn btn-outline-secondary btn-sm me-2">Edit Setup</a>
+        <button class="btn btn-outline-primary btn-sm" @onclick="Print">Print Schedule</button>
     </div>
 
     @if (evt.Rounds.Count == 0)
@@ -26,47 +22,54 @@ else
     }
     else
     {
-        <table class="table table-bordered schedule-table mt-3">
-            <thead>
-                <tr>
-                    <th class="round-col">Round</th>
-                    @foreach (var courtName in courtNames)
-                    {
-                        <th class="text-center">@courtName</th>
-                    }
-                    <th class="text-center bye-col">Bye</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var round in evt.Rounds.OrderBy(r => r.RoundNumber))
-                {
+        <div class="schedule-sheet">
+            <div class="sheet-banner">
+                <img src="/images/NEPC-Logo.svg" class="sheet-logo" alt="NEPC" />
+                <h1 class="sheet-title">@evt.Name</h1>
+            </div>
+            <div class="sheet-subtitle">
+                @evt.Date.ToString("MMMM d, yyyy") &middot; @evt.EventPlayers.Count players &middot; @courtNames.Count courts
+            </div>
+            <table class="sheet-table">
+                <thead>
                     <tr>
-                        <td class="fw-bold text-center align-middle">@round.RoundNumber</td>
-                        @for (int c = 0; c < courtNames.Count; c++)
+                        <th class="round-col">Round</th>
+                        @foreach (var courtName in courtNames)
                         {
-                            var courtNum = c + 1;
-                            var match = round.Matches.FirstOrDefault(m => m.CourtNumber == courtNum);
-                            <td class="text-center align-middle">
-                                @if (match != null)
+                            <th>@courtName</th>
+                        }
+                        <th>Bye</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var round in evt.Rounds.OrderBy(r => r.RoundNumber))
+                    {
+                        <tr>
+                            <td class="round-num">@round.RoundNumber</td>
+                            @for (int c = 0; c < courtNames.Count; c++)
+                            {
+                                var courtNum = c + 1;
+                                var match = round.Matches.FirstOrDefault(m => m.CourtNumber == courtNum);
+                                <td class="match-cell">
+                                    @if (match != null)
+                                    {
+                                        <div>@match.Team1Player1.Name &amp; @match.Team1Player2.Name</div>
+                                        <div class="vs">vs</div>
+                                        <div>@match.Team2Player1.Name &amp; @match.Team2Player2.Name</div>
+                                    }
+                                </td>
+                            }
+                            <td class="bye-cell">
+                                @if (round.Byes.Any())
                                 {
-                                    <span>@match.Team1Player1.Name &amp; @match.Team1Player2.Name</span>
-                                    <br />
-                                    <small class="text-muted">vs</small>
-                                    <br />
-                                    <span>@match.Team2Player1.Name &amp; @match.Team2Player2.Name</span>
+                                    @string.Join(", ", round.Byes.Select(b => b.Player.Name))
                                 }
                             </td>
-                        }
-                        <td class="text-center align-middle text-muted fst-italic">
-                            @if (round.Byes.Any())
-                            {
-                                @string.Join(", ", round.Byes.Select(b => b.Player.Name))
-                            }
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
     }
 }
 
