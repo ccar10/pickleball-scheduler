@@ -32,7 +32,8 @@
       "Bash(curl *)",
       "Bash(git checkout *)",
       "Bash(git stash *)",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(git push *)"
     ]
   }
 }
