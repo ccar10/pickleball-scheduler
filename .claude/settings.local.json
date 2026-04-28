@@ -29,7 +29,10 @@
       "Bash(cat /tmp/pb-logs2/LogFiles/*docker.log)",
       "Bash(unzip -o /tmp/pb-logs3.zip -d /tmp/pb-logs3)",
       "Bash(cat /tmp/pb-logs3/LogFiles/*default_docker.log)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(git checkout *)",
+      "Bash(git stash *)",
+      "Bash(python *)"
     ]
   }
 }
