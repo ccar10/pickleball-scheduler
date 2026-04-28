@@ -19,7 +19,7 @@
 
 /* Schedule sheet - branded WYSIWYG layout (screen + print) */
 .schedule-sheet {
-    border: 1px solid #333;
+    border: 2px solid #000;
     background: #fff;
     max-width: 11in;
     margin: 0 auto;
@@ -72,6 +72,7 @@
     font-weight: 700;
     padding: 6px 8px;
     text-align: center;
+    border: 0;
     border-bottom: 1px solid #333;
 }
 
@@ -83,6 +84,7 @@
     padding: 8px 6px;
     text-align: center;
     vertical-align: middle;
+    border: 0;
 }
 
 .schedule-sheet .sheet-table td.round-num {
@@ -137,6 +139,16 @@
         max-width: none;
         font-size: 9pt;
         page-break-inside: avoid;
+        border: 2px solid #000 !important;
+    }
+
+    .schedule-sheet .sheet-table td,
+    .schedule-sheet .sheet-table th {
+        border: 0 !important;
+    }
+
+    .schedule-sheet .sheet-table thead th {
+        border-bottom: 1px solid #333 !important;
     }
 
     .schedule-sheet .sheet-table td { padding: 4px 6px; }
