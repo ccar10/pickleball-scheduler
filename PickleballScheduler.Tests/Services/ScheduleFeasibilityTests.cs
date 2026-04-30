@@ -3,13 +3,18 @@ namespace PickleballScheduler.Tests.Services;
 public class ScheduleFeasibilityTests
 {
     [Theory]
+    [InlineData(4, 1, 3, 0)]   // smallest non-trivial config
+    [InlineData(4, 1, 4, 1)]   // 1 round past one pass
+    [InlineData(1, 1, 5, 0)]   // guard: too few players
+    [InlineData(8, 0, 5, 0)]   // guard: zero courts
+    [InlineData(8, 2, -1, 0)]  // guard: negative rounds
     [InlineData(8, 1, 7, 0)]   // 8 players, 1 court → 4 active per round, but 8 distinct partners possible across rotation
     [InlineData(8, 2, 7, 0)]   // 8 players, 2 courts, 7 rounds → fits a perfect 1-factorization
     [InlineData(8, 2, 14, 0)]  // 14 = 2 * 7, double round-robin still fits
     [InlineData(8, 2, 15, 1)]  // 15 partners across 7 possible → at least one pair must repeat 3 times (max=3, min=2)
-    public void ExpectedMinForcedRepeats_KnownCases(int players, int courts, int rounds, int expected)
+    public void Hr1RepeatTolerance_KnownCases(int players, int courts, int rounds, int expected)
     {
-        Assert.Equal(expected, ScheduleFeasibility.ExpectedMinForcedRepeats(players, courts, rounds));
+        Assert.Equal(expected, ScheduleFeasibility.Hr1RepeatTolerance(players, courts, rounds));
     }
 
     [Theory]
