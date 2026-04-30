@@ -247,6 +247,19 @@ public class ScheduleGeneratorTests
             $"Expected HR2 violations on 4p/1c/3r config, got {result.Hr2Violations}");
     }
 
+    [Fact]
+    public void Generate_8Players_2Courts_10Rounds_NoConsecutiveOpponents()
+    {
+        // Paul's representative case. After the joint search lands, HR2 must be 0.
+        var players = MakePlayers(8);
+        var generator = new ScheduleGenerator();
+
+        var result = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 10);
+
+        Assert.Equal(0, result.Hr1Violations);
+        Assert.Equal(0, result.Hr2Violations);
+    }
+
     private static string PairKey(int a, int b)
         => a < b ? $"{a}-{b}" : $"{b}-{a}";
 }
