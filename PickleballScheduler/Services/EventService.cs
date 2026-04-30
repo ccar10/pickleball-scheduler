@@ -60,8 +60,11 @@ public class EventService
         await _db.SaveChangesAsync();
     }
 
-    public async Task SaveScheduleAsync(int eventId, List<Round> rounds)
+    public async Task SaveScheduleAsync(int eventId, ScheduleResult result)
     {
+        var evt = await _db.Events.FirstOrDefaultAsync(e => e.Id == eventId);
+        if (evt == null) return;
+
         var existingRounds = await _db.Rounds
             .Where(r => r.EventId == eventId)
             .Include(r => r.Matches)
@@ -75,11 +78,16 @@ public class EventService
         }
         _db.Rounds.RemoveRange(existingRounds);
 
-        foreach (var round in rounds)
+        foreach (var round in result.Rounds)
         {
             round.EventId = eventId;
             _db.Rounds.Add(round);
         }
+
+        evt.Hr1Violations = result.Hr1Violations;
+        evt.Hr2Violations = result.Hr2Violations;
+        evt.RepeatSuggestion = result.RepeatSuggestion;
+
         await _db.SaveChangesAsync();
     }
 

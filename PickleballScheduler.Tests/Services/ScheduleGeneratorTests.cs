@@ -18,7 +18,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(4);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 3);
+        var result = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 3);
+        var rounds = result.Rounds;
 
         Assert.Equal(3, rounds.Count);
 
@@ -45,7 +46,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(5);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 4);
+        var result = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 4);
+        var rounds = result.Rounds;
 
         Assert.Equal(4, rounds.Count);
 
@@ -69,7 +71,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(8);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 3);
+        var result = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 3);
+        var rounds = result.Rounds;
 
         Assert.Equal(3, rounds.Count);
         foreach (var round in rounds)
@@ -85,7 +88,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(8);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 5);
+        var result = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 5);
+        var rounds = result.Rounds;
 
         var partnerships = new HashSet<string>();
         foreach (var round in rounds)
@@ -109,7 +113,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(6);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 4);
+        var result = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 4);
+        var rounds = result.Rounds;
 
         foreach (var round in rounds)
         {
@@ -124,7 +129,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(8);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 3);
+        var result = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 3);
+        var rounds = result.Rounds;
 
         foreach (var round in rounds)
         {
@@ -151,7 +157,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(8);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 5);
+        var result = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 5);
+        var rounds = result.Rounds;
 
         // Track how many times each pair of players oppose each other
         var opponentCounts = new Dictionary<string, int>();
@@ -185,7 +192,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(8);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 6);
+        var result = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 6);
+        var rounds = result.Rounds;
 
         // Track court assignments per player
         var courtCounts = new Dictionary<int, Dictionary<int, int>>();
@@ -223,6 +231,54 @@ public class ScheduleGeneratorTests
                     $"Player {pid} has court imbalance: {string.Join(", ", counts.Select(kv => $"Court {kv.Key}: {kv.Value}"))}");
             }
         }
+    }
+
+    [Fact]
+    public void Generate_4Players_1Court_3Rounds_AnyHr2Reported()
+    {
+        // 4 players / 1 court forces HR2 violations every round (you face the only 2 opponents).
+        // Current algorithm doesn't avoid them. After Task 2, count should be > 0.
+        var players = MakePlayers(4);
+        var generator = new ScheduleGenerator();
+
+        var result = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 3);
+
+        Assert.True(result.Hr2Violations > 0,
+            $"Expected HR2 violations on 4p/1c/3r config, got {result.Hr2Violations}");
+    }
+
+    [Fact]
+    public void Generate_8Players_2Courts_10Rounds_NoConsecutiveOpponents()
+    {
+        // Paul's representative case. After the joint search lands, HR2 must be 0.
+        var players = MakePlayers(8);
+        var generator = new ScheduleGenerator();
+
+        var result = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 10);
+
+        Assert.Equal(0, result.Hr1Violations);
+        Assert.Equal(0, result.Hr2Violations);
+    }
+
+    [Fact]
+    public void TrySuggestZeroViolationConfig_8Players_2Courts_3Rounds_ReturnsNull()
+    {
+        // 8/2/3 already produces zero violations — no suggestion needed.
+        var players = MakePlayers(8);
+        var suggestion = ScheduleGenerator.TrySuggestZeroViolationConfig(
+            players, courts: 2, rounds: 3);
+        Assert.Null(suggestion);
+    }
+
+    [Fact]
+    public void TrySuggestZeroViolationConfig_4Players_1Court_5Rounds_SuggestsBetterConfig()
+    {
+        // 4/1/5 forces HR2 every round. A near-neighbor config (e.g., 6/1/5) can clear it.
+        var players = MakePlayers(4);
+        var suggestion = ScheduleGenerator.TrySuggestZeroViolationConfig(
+            players, courts: 1, rounds: 5);
+        Assert.NotNull(suggestion);
+        Assert.Contains("players", suggestion!);
     }
 
     private static string PairKey(int a, int b)
