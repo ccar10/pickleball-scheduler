@@ -31,10 +31,24 @@ public class ScheduleGenerator
             var activePlayers = SelectActivePlayers(players, playersPerRound, byeCounts);
             var byePlayers = players.Where(p => !activePlayers.Contains(p)).ToList();
 
-            var roundResult = BuildRound(activePlayers, players, partnerCounts, opponentCounts,
-                lastOpponentRound, courtCounts, r, matchesPerRound);
+            List<Match> matches;
+            bool useWhist =
+                WhistCyclicSchedule.IsSupportedSize(players.Count) &&
+                numberOfCourts >= players.Count / 4 &&
+                numberOfRounds >= players.Count - 1 &&
+                r < players.Count - 1;
 
-            var matches = roundResult.Matches;
+            if (useWhist)
+            {
+                matches = WhistCyclicSchedule.GetRoundMatchups(players, r);
+                AssignCourts(matches, courtCounts, matchesPerRound);
+            }
+            else
+            {
+                var roundResult = BuildRound(activePlayers, players, partnerCounts, opponentCounts,
+                    lastOpponentRound, courtCounts, r, matchesPerRound);
+                matches = roundResult.Matches;
+            }
 
             // HR1: forced repeats — pair partner count was strictly greater than the
             // minimum partner count among pairs sharing a player with this pair, BEFORE this round.
