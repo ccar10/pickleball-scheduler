@@ -62,11 +62,8 @@ public class ScheduleGenerator
                     (match.Team1Player1Id, match.Team1Player2Id),
                     (match.Team2Player1Id, match.Team2Player2Id) })
                 {
-                    var key = PairKey(pair.Item1, pair.Item2);
-                    var priorCount = partnerCounts.GetValueOrDefault(key);
-                    if (priorCount == 0) continue;
-                    var minSiblingCount = MinSiblingPartnerCount(pair.Item1, pair.Item2, players, partnerCounts);
-                    if (priorCount > minSiblingCount) hr1Violations++;
+                    if (IsHr1Violation(pair.Item1, pair.Item2, players, partnerCounts))
+                        hr1Violations++;
                 }
             }
 
@@ -77,11 +74,8 @@ public class ScheduleGenerator
                 var team2 = new[] { match.Team2Player1Id, match.Team2Player2Id };
                 foreach (var p1 in team1)
                     foreach (var p2 in team2)
-                    {
-                        var key = PairKey(p1, p2);
-                        if (lastOpponentRound.GetValueOrDefault(key, -10) == r - 1)
+                        if (IsHr2Violation(p1, p2, lastOpponentRound, r))
                             hr2Violations++;
-                    }
             }
 
             // Tracking update — MUST run after the HR1/HR2 counting blocks above,
@@ -408,8 +402,37 @@ public class ScheduleGenerator
         return shuffled;
     }
 
-    internal static string PairKey(int a, int b)
+    public static string PairKey(int a, int b)
         => a < b ? $"{a}-{b}" : $"{b}-{a}";
+
+    public static bool IsHr1Violation(
+        int a, int b, List<Player> players, Dictionary<string, int> partnerCounts)
+    {
+        var key = PairKey(a, b);
+        var thisCount = partnerCounts.GetValueOrDefault(key);
+        if (thisCount == 0) return false;
+
+        int minSibling = int.MaxValue;
+        foreach (var p in players)
+        {
+            if (p.Id == a || p.Id == b) continue;
+            var ka = PairKey(a, p.Id);
+            var kb = PairKey(b, p.Id);
+            var ca = partnerCounts.GetValueOrDefault(ka);
+            var cb = partnerCounts.GetValueOrDefault(kb);
+            if (ca < minSibling) minSibling = ca;
+            if (cb < minSibling) minSibling = cb;
+        }
+        if (minSibling == int.MaxValue) minSibling = 0;
+        return thisCount > minSibling;
+    }
+
+    public static bool IsHr2Violation(
+        int a, int b, Dictionary<string, int> lastOpponentRound, int currentRound)
+    {
+        var key = PairKey(a, b);
+        return lastOpponentRound.GetValueOrDefault(key, -10) == currentRound - 1;
+    }
 
     // Circle method: produces a 1-factorization of the complete graph on `players.Count`
     // vertices (must be even). One player is held fixed; the other n-1 rotate around a
@@ -441,20 +464,4 @@ public class ScheduleGenerator
         return schedule;
     }
 
-    private static int MinSiblingPartnerCount(
-        int a, int b, List<Player> players, Dictionary<string, int> partnerCounts)
-    {
-        int min = int.MaxValue;
-        foreach (var p in players)
-        {
-            if (p.Id == a || p.Id == b) continue;
-            var ka = PairKey(a, p.Id);
-            var kb = PairKey(b, p.Id);
-            var ca = partnerCounts.GetValueOrDefault(ka);
-            var cb = partnerCounts.GetValueOrDefault(kb);
-            if (ca < min) min = ca;
-            if (cb < min) min = cb;
-        }
-        return min == int.MaxValue ? 0 : min;
-    }
 }
