@@ -318,7 +318,13 @@
         await EventService.SetPlayersAsync(evt.Id, dbPlayers.Select(p => p.Id).ToList());
 
         var result = ScheduleGenerator.Generate(dbPlayers, numberOfCourts, numberOfRounds);
-        await EventService.SaveScheduleAsync(evt.Id, result.Rounds);
+        string? suggestion = null;
+        if (result.Hr1Violations > 0 || result.Hr2Violations > 0)
+        {
+            suggestion = ScheduleGenerator.TrySuggestZeroViolationConfig(dbPlayers, numberOfCourts, numberOfRounds);
+        }
+        var resultWithSuggestion = result with { RepeatSuggestion = suggestion };
+        await EventService.SaveScheduleAsync(evt.Id, resultWithSuggestion);
 
         // Clear local storage so next new event starts fresh
         try { await JS.InvokeVoidAsync("localStorage.removeItem", StorageKey); } catch { }
