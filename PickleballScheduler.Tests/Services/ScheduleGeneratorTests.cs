@@ -233,6 +233,20 @@ public class ScheduleGeneratorTests
         }
     }
 
+    [Fact]
+    public void Generate_4Players_1Court_3Rounds_AnyHr2Reported()
+    {
+        // 4 players / 1 court forces HR2 violations every round (you face the only 2 opponents).
+        // Current algorithm doesn't avoid them. After Task 2, count should be > 0.
+        var players = MakePlayers(4);
+        var generator = new ScheduleGenerator();
+
+        var result = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 3);
+
+        Assert.True(result.Hr2Violations > 0,
+            $"Expected HR2 violations on 4p/1c/3r config, got {result.Hr2Violations}");
+    }
+
     private static string PairKey(int a, int b)
         => a < b ? $"{a}-{b}" : $"{b}-{a}";
 }

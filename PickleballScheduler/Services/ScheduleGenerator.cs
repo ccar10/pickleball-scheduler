@@ -28,6 +28,10 @@ public class ScheduleGenerator
         var circleRounds = canUseCircle ? Math.Min(numberOfRounds, players.Count - 1) : 0;
         var circleSchedule = circleRounds > 0 ? CircleMethodSchedule(players, circleRounds) : null;
 
+        int hr1Violations = 0;
+        int hr2Violations = 0;
+        var lastOpponentRound = new Dictionary<string, int>();
+
         for (int r = 0; r < numberOfRounds; r++)
         {
             var activePlayers = SelectActivePlayers(players, playersPerRound, byeCounts);
@@ -49,6 +53,36 @@ public class ScheduleGenerator
 
             // Assign courts: balance court usage
             AssignCourts(matches, courtCounts, matchesPerRound);
+
+            // HR1: forced repeats — pair partner count was strictly greater than the
+            // minimum partner count among pairs sharing a player with this pair, BEFORE this round.
+            foreach (var match in matches)
+            {
+                foreach (var pair in new[] {
+                    (match.Team1Player1Id, match.Team1Player2Id),
+                    (match.Team2Player1Id, match.Team2Player2Id) })
+                {
+                    var key = PairKey(pair.Item1, pair.Item2);
+                    var priorCount = partnerCounts.GetValueOrDefault(key);
+                    if (priorCount == 0) continue;
+                    var minSiblingCount = MinSiblingPartnerCount(pair.Item1, pair.Item2, players, partnerCounts);
+                    if (priorCount > minSiblingCount) hr1Violations++;
+                }
+            }
+
+            // HR2: opponent pair faced in the immediately previous round.
+            foreach (var match in matches)
+            {
+                var team1 = new[] { match.Team1Player1Id, match.Team1Player2Id };
+                var team2 = new[] { match.Team2Player1Id, match.Team2Player2Id };
+                foreach (var p1 in team1)
+                    foreach (var p2 in team2)
+                    {
+                        var key = PairKey(p1, p2);
+                        if (lastOpponentRound.GetValueOrDefault(key, -10) == r - 1)
+                            hr2Violations++;
+                    }
+            }
 
             // Record all tracking data
             foreach (var match in matches)
@@ -74,6 +108,7 @@ public class ScheduleGenerator
                     {
                         var ok = PairKey(p1, p2);
                         opponentCounts[ok] = opponentCounts.GetValueOrDefault(ok) + 1;
+                        lastOpponentRound[ok] = r;
                     }
 
                 // Court counts
@@ -94,7 +129,7 @@ public class ScheduleGenerator
             });
         }
 
-        return new ScheduleResult(rounds, Hr1Violations: 0, Hr2Violations: 0, RepeatSuggestion: null);
+        return new ScheduleResult(rounds, hr1Violations, hr2Violations, RepeatSuggestion: null);
     }
 
     private static List<Player> SelectActivePlayers(List<Player> players, int needed, Dictionary<int, int> byeCounts)
@@ -403,5 +438,22 @@ public class ScheduleGenerator
         }
 
         return schedule;
+    }
+
+    private static int MinSiblingPartnerCount(
+        int a, int b, List<Player> players, Dictionary<string, int> partnerCounts)
+    {
+        int min = int.MaxValue;
+        foreach (var p in players)
+        {
+            if (p.Id == a || p.Id == b) continue;
+            var ka = PairKey(a, p.Id);
+            var kb = PairKey(b, p.Id);
+            var ca = partnerCounts.GetValueOrDefault(ka);
+            var cb = partnerCounts.GetValueOrDefault(kb);
+            if (ca < min) min = ca;
+            if (cb < min) min = cb;
+        }
+        return min == int.MaxValue ? 0 : min;
     }
 }
