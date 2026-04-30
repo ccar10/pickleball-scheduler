@@ -260,6 +260,27 @@ public class ScheduleGeneratorTests
         Assert.Equal(0, result.Hr2Violations);
     }
 
+    [Fact]
+    public void TrySuggestZeroViolationConfig_8Players_2Courts_3Rounds_ReturnsNull()
+    {
+        // 8/2/3 already produces zero violations — no suggestion needed.
+        var players = MakePlayers(8);
+        var suggestion = ScheduleGenerator.TrySuggestZeroViolationConfig(
+            players, courts: 2, rounds: 3);
+        Assert.Null(suggestion);
+    }
+
+    [Fact]
+    public void TrySuggestZeroViolationConfig_4Players_1Court_5Rounds_SuggestsBetterConfig()
+    {
+        // 4/1/5 forces HR2 every round. A near-neighbor config (e.g., 6/1/5) can clear it.
+        var players = MakePlayers(4);
+        var suggestion = ScheduleGenerator.TrySuggestZeroViolationConfig(
+            players, courts: 1, rounds: 5);
+        Assert.NotNull(suggestion);
+        Assert.Contains("players", suggestion!);
+    }
+
     private static string PairKey(int a, int b)
         => a < b ? $"{a}-{b}" : $"{b}-{a}";
 }
