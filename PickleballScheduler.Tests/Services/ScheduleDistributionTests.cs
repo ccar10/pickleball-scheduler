@@ -148,4 +148,52 @@ public class ScheduleDistributionTests
         var key = a < b ? $"{a}-{b}" : $"{b}-{a}";
         counts[key] = counts.GetValueOrDefault(key) + 1;
     }
+
+    [Fact]
+    public void StressTest_NoStructuralViolations()
+    {
+        // Sample size kept moderate to fit in CI test budget; joint search can be slow on
+        // 16-active configs (Task 15 will add a beam-search fallback). The intent is to
+        // surface exceptions and double-booking bugs, not to verify fairness (covered by
+        // Generate_DistributionMetrics).
+        const int Samples = 50;
+
+        var rng = new Random(20260430);
+        for (int i = 0; i < Samples; i++)
+        {
+            int playerCount = rng.Next(4, 25);
+            int courts = rng.Next(1, 7);
+            int rounds = rng.Next(3, 16);
+
+            var players = Enumerable.Range(1, playerCount)
+                .Select(id => new Player { Id = id, Name = $"P{id}" })
+                .ToList();
+            var generator = new ScheduleGenerator();
+
+            ScheduleResult result;
+            try
+            {
+                result = generator.Generate(players, courts, rounds);
+            }
+            catch (Exception ex)
+            {
+                Assert.Fail($"Threw on config p={playerCount} c={courts} r={rounds} (i={i}): {ex.Message}");
+                return;
+            }
+
+            foreach (var round in result.Rounds)
+            {
+                var seen = new HashSet<int>();
+                foreach (var match in round.Matches)
+                {
+                    Assert.InRange(match.CourtNumber, 1, courts);
+                    foreach (var pid in new[] { match.Team1Player1Id, match.Team1Player2Id, match.Team2Player1Id, match.Team2Player2Id })
+                    {
+                        Assert.True(seen.Add(pid),
+                            $"Player {pid} double-booked in round {round.RoundNumber} (config p={playerCount} c={courts} r={rounds} i={i})");
+                    }
+                }
+            }
+        }
+    }
 }
