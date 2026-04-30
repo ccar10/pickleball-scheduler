@@ -11,6 +11,9 @@ public class Event
     public User? User { get; set; }
     public List<EventPlayer> EventPlayers { get; set; } = new();
     public List<Round> Rounds { get; set; } = new();
+    public int Hr1Violations { get; set; } = 0;
+    public int Hr2Violations { get; set; } = 0;
+    public string? RepeatSuggestion { get; set; }
 
     /// <summary>
     /// Returns the list of court names parsed from the semicolon-delimited CourtNames field.
