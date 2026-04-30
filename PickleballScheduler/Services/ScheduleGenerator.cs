@@ -84,7 +84,8 @@ public class ScheduleGenerator
                     }
             }
 
-            // Record all tracking data
+            // Tracking update — MUST run after the HR1/HR2 counting blocks above,
+            // which read partnerCounts and lastOpponentRound at their pre-round values.
             foreach (var match in matches)
             {
                 var t1p1 = match.Team1Player1Id;
