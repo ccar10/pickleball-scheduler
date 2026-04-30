@@ -4,6 +4,9 @@ namespace PickleballScheduler.Services;
 
 public class ScheduleGenerator
 {
+    private const int BeamWidthLargeActive = 1;
+    private const int BeamThreshold = 9;
+
     public ScheduleResult Generate(List<Player> players, int numberOfCourts, int numberOfRounds)
     {
         var matchesPerRound = Math.Min(numberOfCourts, players.Count / 4);
@@ -195,9 +198,26 @@ public class ScheduleGenerator
         used[first] = true;
         var p1 = active[first];
 
+        // Collect partner candidates with their incremental cost.
+        var candidates = new List<(int j, long incCost)>();
         for (int j = first + 1; j < active.Count; j++)
         {
             if (used[j]) continue;
+            var cp1p2 = active[j];
+            var cPartnerKey = PairKey(p1.Id, cp1p2.Id);
+            var cPartnerHr1 = IsHr1Violation(p1.Id, cp1p2.Id, allPlayers, partnerCounts) ? 1 : 0;
+            var cPartnerNewCount = partnerCounts.GetValueOrDefault(cPartnerKey) + 1;
+            var cPartnerSqDelta = (long)cPartnerNewCount * cPartnerNewCount
+                                - (long)(cPartnerNewCount - 1) * (cPartnerNewCount - 1);
+            var incCost = (long)cPartnerHr1 * 1_000_000L + cPartnerSqDelta;
+            candidates.Add((j, incCost));
+        }
+        candidates.Sort((a, b) => a.incCost.CompareTo(b.incCost));
+
+        int limit = active.Count > BeamThreshold ? Math.Min(BeamWidthLargeActive, candidates.Count) : candidates.Count;
+        for (int idx = 0; idx < limit; idx++)
+        {
+            var (j, _) = candidates[idx];
             var p1p2 = active[j];
             var partnerKey = PairKey(p1.Id, p1p2.Id);
             var partnerHr1 = IsHr1Violation(p1.Id, p1p2.Id, allPlayers, partnerCounts) ? 1 : 0;

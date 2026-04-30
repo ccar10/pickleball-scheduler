@@ -150,6 +150,24 @@ public class ScheduleDistributionTests
     }
 
     [Fact]
+    public void Generate_16Players_4Courts_10Rounds_CompletesWithinBudget()
+    {
+        var players = Enumerable.Range(1, 16)
+            .Select(i => new Player { Id = i, Name = $"P{i}" })
+            .ToList();
+        var generator = new ScheduleGenerator();
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = generator.Generate(players, numberOfCourts: 4, numberOfRounds: 10);
+        sw.Stop();
+
+        Assert.Equal(0, result.Hr1Violations);
+        Assert.Equal(0, result.Hr2Violations);
+        Assert.True(sw.ElapsedMilliseconds < 5000,
+            $"Generation took {sw.ElapsedMilliseconds}ms, exceeds 5s budget");
+    }
+
+    [Fact]
     public void StressTest_NoStructuralViolations()
     {
         // Sample size kept moderate to fit in CI test budget; joint search can be slow on
