@@ -18,7 +18,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(4);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 3);
+        var result = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 3);
+        var rounds = result.Rounds;
 
         Assert.Equal(3, rounds.Count);
 
@@ -45,7 +46,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(5);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 4);
+        var result = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 4);
+        var rounds = result.Rounds;
 
         Assert.Equal(4, rounds.Count);
 
@@ -69,7 +71,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(8);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 3);
+        var result = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 3);
+        var rounds = result.Rounds;
 
         Assert.Equal(3, rounds.Count);
         foreach (var round in rounds)
@@ -85,7 +88,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(8);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 5);
+        var result = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 5);
+        var rounds = result.Rounds;
 
         var partnerships = new HashSet<string>();
         foreach (var round in rounds)
@@ -109,7 +113,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(6);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 4);
+        var result = generator.Generate(players, numberOfCourts: 1, numberOfRounds: 4);
+        var rounds = result.Rounds;
 
         foreach (var round in rounds)
         {
@@ -124,7 +129,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(8);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 3);
+        var result = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 3);
+        var rounds = result.Rounds;
 
         foreach (var round in rounds)
         {
@@ -151,7 +157,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(8);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 5);
+        var result = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 5);
+        var rounds = result.Rounds;
 
         // Track how many times each pair of players oppose each other
         var opponentCounts = new Dictionary<string, int>();
@@ -185,7 +192,8 @@ public class ScheduleGeneratorTests
         var players = MakePlayers(8);
         var generator = new ScheduleGenerator();
 
-        var rounds = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 6);
+        var result = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 6);
+        var rounds = result.Rounds;
 
         // Track court assignments per player
         var courtCounts = new Dictionary<int, Dictionary<int, int>>();

@@ -4,7 +4,7 @@ namespace PickleballScheduler.Services;
 
 public class ScheduleGenerator
 {
-    public List<Round> Generate(List<Player> players, int numberOfCourts, int numberOfRounds)
+    public ScheduleResult Generate(List<Player> players, int numberOfCourts, int numberOfRounds)
     {
         var matchesPerRound = Math.Min(numberOfCourts, players.Count / 4);
         var playersPerRound = matchesPerRound * 4;
@@ -94,7 +94,7 @@ public class ScheduleGenerator
             });
         }
 
-        return rounds;
+        return new ScheduleResult(rounds, Hr1Violations: 0, Hr2Violations: 0, RepeatSuggestion: null);
     }
 
     private static List<Player> SelectActivePlayers(List<Player> players, int needed, Dictionary<int, int> byeCounts)
