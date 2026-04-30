@@ -91,7 +91,15 @@
         }
 
         <button class="btn btn-success w-100" @onclick="GenerateSchedule" disabled="@isGenerating">
-            @(isGenerating ? "Generating..." : "Generate Schedule")
+            @if (isGenerating)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                <text>Generating...</text>
+            }
+            else
+            {
+                <text>Generate Schedule</text>
+            }
         </button>
     </div>
 </div>
@@ -281,6 +289,8 @@
         }
 
         isGenerating = true;
+        StateHasChanged();
+        await Task.Yield();  // let the UI paint the "Generating..." state before we block on DB/generator work
 
         var numberOfCourts = courtNames.Count;
         var courtNamesStr = string.Join(";", courtNames);
