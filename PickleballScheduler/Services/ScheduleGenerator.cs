@@ -226,89 +226,83 @@ public class ScheduleGenerator
 
             used[j] = true;
 
-            // Pick the next anchor (lowest unused), then its partner — together with (first, j) forms one match.
-            int anchor2 = -1;
-            for (int k = first + 1; k < active.Count; k++)
-                if (!used[k]) { anchor2 = k; break; }
-
-            if (anchor2 == -1)
+            // Match 1's other team is any 2-subset of the remaining unused players.
+            // Enumerate all (k, m) with k < m, both unused, both != first and != j.
+            for (int k = 0; k < active.Count; k++)
             {
-                // Odd number — should not happen for active = 4k. Skip.
-                used[j] = false;
-                continue;
-            }
-
-            var p2 = active[anchor2];
-            used[anchor2] = true;
-            for (int m = anchor2 + 1; m < active.Count; m++)
-            {
-                if (used[m]) continue;
-                var p2p2 = active[m];
-                var partner2Key = PairKey(p2.Id, p2p2.Id);
-                var partner2Hr1 = IsHr1Violation(p2.Id, p2p2.Id, allPlayers, partnerCounts) ? 1 : 0;
-                var partner2NewCount = partnerCounts.GetValueOrDefault(partner2Key) + 1;
-                var partner2SqDelta = (long)partner2NewCount * partner2NewCount
-                                    - (long)(partner2NewCount - 1) * (partner2NewCount - 1);
-
-                // Compute opponent contributions for the 4 cross-pairs.
-                int matchHr2 = 0;
-                long matchOppSq = 0;
-                int[] team1 = { p1.Id, p1p2.Id };
-                int[] team2 = { p2.Id, p2p2.Id };
-                foreach (var x in team1)
-                    foreach (var y in team2)
-                    {
-                        var ok = PairKey(x, y);
-                        if (IsHr2Violation(x, y, lastOpponentRound, currentRound)) matchHr2++;
-                        var oNew = opponentCounts.GetValueOrDefault(ok) + 1;
-                        matchOppSq += (long)oNew * oNew - (long)(oNew - 1) * (oNew - 1);
-                    }
-
-                used[m] = true;
-                current.Add(new Match
+                if (used[k]) continue;
+                for (int m = k + 1; m < active.Count; m++)
                 {
-                    Team1Player1Id = p1.Id,
-                    Team1Player2Id = p1p2.Id,
-                    Team2Player1Id = p2.Id,
-                    Team2Player2Id = p2p2.Id,
-                });
+                    if (used[m]) continue;
+                    var p2 = active[k];
+                    var p2p2 = active[m];
+                    var partner2Key = PairKey(p2.Id, p2p2.Id);
+                    var partner2Hr1 = IsHr1Violation(p2.Id, p2p2.Id, allPlayers, partnerCounts) ? 1 : 0;
+                    var partner2NewCount = partnerCounts.GetValueOrDefault(partner2Key) + 1;
+                    var partner2SqDelta = (long)partner2NewCount * partner2NewCount
+                                        - (long)(partner2NewCount - 1) * (partner2NewCount - 1);
 
-                // Mutate the running counts for recursion.
-                partnerCounts[partnerKey] = partnerNewCount;
-                partnerCounts[partner2Key] = partner2NewCount;
-                foreach (var x in team1)
-                    foreach (var y in team2)
+                    // Compute opponent contributions for the 4 cross-pairs.
+                    int matchHr2 = 0;
+                    long matchOppSq = 0;
+                    int[] team1 = { p1.Id, p1p2.Id };
+                    int[] team2 = { p2.Id, p2p2.Id };
+                    foreach (var x in team1)
+                        foreach (var y in team2)
+                        {
+                            var ok = PairKey(x, y);
+                            if (IsHr2Violation(x, y, lastOpponentRound, currentRound)) matchHr2++;
+                            var oNew = opponentCounts.GetValueOrDefault(ok) + 1;
+                            matchOppSq += (long)oNew * oNew - (long)(oNew - 1) * (oNew - 1);
+                        }
+
+                    used[k] = true;
+                    used[m] = true;
+                    current.Add(new Match
                     {
-                        var ok = PairKey(x, y);
-                        opponentCounts[ok] = opponentCounts.GetValueOrDefault(ok) + 1;
-                    }
+                        Team1Player1Id = p1.Id,
+                        Team1Player2Id = p1p2.Id,
+                        Team2Player1Id = p2.Id,
+                        Team2Player2Id = p2p2.Id,
+                    });
 
-                SearchMatches(active, allPlayers, partnerCounts, opponentCounts,
-                    lastOpponentRound, courtCounts, currentRound, numberOfCourts,
-                    used, current,
-                    runningHr1 + partnerHr1 + partner2Hr1,
-                    runningHr2 + matchHr2,
-                    runningPartnerSq + partnerSqDelta + partner2SqDelta,
-                    runningOpponentSq + matchOppSq,
-                    ref best);
+                    // Mutate the running counts for recursion.
+                    partnerCounts[partnerKey] = partnerNewCount;
+                    partnerCounts[partner2Key] = partner2NewCount;
+                    foreach (var x in team1)
+                        foreach (var y in team2)
+                        {
+                            var ok = PairKey(x, y);
+                            opponentCounts[ok] = opponentCounts.GetValueOrDefault(ok) + 1;
+                        }
 
-                // Undo.
-                foreach (var x in team1)
-                    foreach (var y in team2)
-                    {
-                        var ok = PairKey(x, y);
-                        opponentCounts[ok]--;
-                        if (opponentCounts[ok] == 0) opponentCounts.Remove(ok);
-                    }
-                partnerCounts[partnerKey] = partnerNewCount - 1;
-                if (partnerCounts[partnerKey] == 0) partnerCounts.Remove(partnerKey);
-                partnerCounts[partner2Key] = partner2NewCount - 1;
-                if (partnerCounts[partner2Key] == 0) partnerCounts.Remove(partner2Key);
+                    SearchMatches(active, allPlayers, partnerCounts, opponentCounts,
+                        lastOpponentRound, courtCounts, currentRound, numberOfCourts,
+                        used, current,
+                        runningHr1 + partnerHr1 + partner2Hr1,
+                        runningHr2 + matchHr2,
+                        runningPartnerSq + partnerSqDelta + partner2SqDelta,
+                        runningOpponentSq + matchOppSq,
+                        ref best);
 
-                current.RemoveAt(current.Count - 1);
-                used[m] = false;
+                    // Undo.
+                    foreach (var x in team1)
+                        foreach (var y in team2)
+                        {
+                            var ok = PairKey(x, y);
+                            opponentCounts[ok]--;
+                            if (opponentCounts[ok] == 0) opponentCounts.Remove(ok);
+                        }
+                    partnerCounts[partnerKey] = partnerNewCount - 1;
+                    if (partnerCounts[partnerKey] == 0) partnerCounts.Remove(partnerKey);
+                    partnerCounts[partner2Key] = partner2NewCount - 1;
+                    if (partnerCounts[partner2Key] == 0) partnerCounts.Remove(partner2Key);
+
+                    current.RemoveAt(current.Count - 1);
+                    used[k] = false;
+                    used[m] = false;
+                }
             }
-            used[anchor2] = false;
             used[j] = false;
         }
         used[first] = false;
