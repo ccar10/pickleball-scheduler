@@ -281,6 +281,60 @@ public class ScheduleGeneratorTests
         Assert.Contains("players", suggestion!);
     }
 
+    [Fact]
+    public void Generate_8Players_2Courts_7Rounds_PerfectWhistCycle()
+    {
+        var players = MakePlayers(8);
+        var generator = new ScheduleGenerator();
+
+        var result = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 7);
+
+        Assert.Equal(0, result.Hr1Violations);
+        Assert.Equal(0, result.Hr2Violations);
+
+        var partnerCounts = new Dictionary<string, int>();
+        var opponentCounts = new Dictionary<string, int>();
+        foreach (var round in result.Rounds)
+            foreach (var m in round.Matches)
+            {
+                IncrementPair(partnerCounts, m.Team1Player1Id, m.Team1Player2Id);
+                IncrementPair(partnerCounts, m.Team2Player1Id, m.Team2Player2Id);
+                foreach (var p1 in new[] { m.Team1Player1Id, m.Team1Player2Id })
+                    foreach (var p2 in new[] { m.Team2Player1Id, m.Team2Player2Id })
+                        IncrementPair(opponentCounts, p1, p2);
+            }
+
+        Assert.Equal(28, partnerCounts.Count);
+        Assert.All(partnerCounts.Values, v => Assert.Equal(1, v));
+        Assert.Equal(28, opponentCounts.Count);
+        Assert.All(opponentCounts.Values, v => Assert.Equal(2, v));
+    }
+
+    [Fact]
+    public void Generate_10Players_2Courts_9Rounds_FallsBackToJointSearch()
+    {
+        // 10 is not a Whist size; the joint search should handle it without exceptions.
+        var players = MakePlayers(10);
+        var generator = new ScheduleGenerator();
+
+        var result = generator.Generate(players, numberOfCourts: 2, numberOfRounds: 9);
+
+        Assert.Equal(9, result.Rounds.Count);
+        foreach (var round in result.Rounds)
+        {
+            var seen = new HashSet<int>();
+            foreach (var m in round.Matches)
+                foreach (var pid in new[] { m.Team1Player1Id, m.Team1Player2Id, m.Team2Player1Id, m.Team2Player2Id })
+                    Assert.True(seen.Add(pid), $"Player {pid} double-booked in round {round.RoundNumber}");
+        }
+    }
+
+    private static void IncrementPair(Dictionary<string, int> counts, int a, int b)
+    {
+        var key = a < b ? $"{a}-{b}" : $"{b}-{a}";
+        counts[key] = counts.GetValueOrDefault(key) + 1;
+    }
+
     private static string PairKey(int a, int b)
         => a < b ? $"{a}-{b}" : $"{b}-{a}";
 }
