@@ -327,7 +327,14 @@
 
         await EventService.SetPlayersAsync(evt.Id, dbPlayers.Select(p => p.Id).ToList());
 
-        var result = ScheduleGenerator.Generate(dbPlayers, numberOfCourts, numberOfRounds);
+        // Shuffle the player list deterministically by event id so each event gets a
+        // different Whist labeling (which player is ∞, partner sequence, etc.). The
+        // schedule still satisfies Whist invariants regardless of input order — only
+        // the visual sequencing changes. Re-generating the same event yields the same
+        // schedule because the seed is the event id.
+        var generatorPlayers = ShuffleByEvent(dbPlayers, evt.Id);
+
+        var result = ScheduleGenerator.Generate(generatorPlayers, numberOfCourts, numberOfRounds);
         string? suggestion = null;
         if (result.Hr1Violations > 0 || result.Hr2Violations > 0)
         {
@@ -341,5 +348,17 @@
 
         isGenerating = false;
         Nav.NavigateTo($"/event/{evt.Id}/schedule");
+    }
+
+    private static List<Player> ShuffleByEvent(List<Player> source, int seed)
+    {
+        var rng = new Random(seed);
+        var arr = source.ToArray();
+        for (int i = arr.Length - 1; i > 0; i--)
+        {
+            int j = rng.Next(i + 1);
+            (arr[i], arr[j]) = (arr[j], arr[i]);
+        }
+        return arr.ToList();
     }
 }
