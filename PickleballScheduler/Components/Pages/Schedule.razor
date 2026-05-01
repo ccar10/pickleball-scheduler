@@ -13,21 +13,9 @@ else
 {
     <div class="no-print mb-3">
         <a href="/event/@evt.Id/setup" class="btn btn-outline-secondary btn-sm me-2">Edit Setup</a>
+        <a href="/event/@evt.Id/stats" class="btn btn-outline-secondary btn-sm me-2">View Stats</a>
         <button class="btn btn-outline-primary btn-sm" @onclick="Print">Print Schedule</button>
     </div>
-
-    @if (evt.Hr1Violations > 0 || evt.Hr2Violations > 0)
-    {
-        <div class="alert alert-warning no-print" role="alert">
-            ⚠ With these settings, this schedule has some unavoidable repeats:
-            <strong>@evt.Hr1Violations</strong> early partner repeat(s),
-            <strong>@evt.Hr2Violations</strong> back-to-back opponent matchup(s).
-            @if (!string.IsNullOrEmpty(evt.RepeatSuggestion))
-            {
-                <text> For a perfectly fair schedule, try <strong>@evt.RepeatSuggestion</strong>.</text>
-            }
-        </div>
-    }
 
     @if (evt.Rounds.Count == 0)
     {

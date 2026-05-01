@@ -1,0 +1,228 @@
+@page "/event/{EventId:int}/stats"
+@inject EventService EventService
+@rendermode InteractiveServer
+
+<PageTitle>Event Stats</PageTitle>
+
+@if (evt == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="mb-3">
+        <a href="/event/@evt.Id/schedule" class="btn btn-outline-secondary btn-sm me-2">Back to Schedule</a>
+        <a href="/event/@evt.Id/setup" class="btn btn-outline-secondary btn-sm">Edit Setup</a>
+    </div>
+
+    <h1 class="mb-3">@evt.Name &mdash; Stats</h1>
+
+    @if (evt.Hr1Violations > 0 || evt.Hr2Violations > 0)
+    {
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Schedule Quality</h5>
+                <p class="card-text mb-1">
+                    <strong>@evt.Hr1Violations</strong> early partner repeat(s),
+                    <strong>@evt.Hr2Violations</strong> back-to-back opponent matchup(s).
+                </p>
+                @if (!string.IsNullOrEmpty(evt.RepeatSuggestion))
+                {
+                    <p class="card-text text-muted mb-0">
+                        For a perfectly fair schedule, try <strong>@evt.RepeatSuggestion</strong>.
+                    </p>
+                }
+            </div>
+        </div>
+    }
+
+    <div class="row g-4">
+        <div class="col-md-6">
+            <h2 class="h5">Partner Matrix</h2>
+            <p class="text-muted small">How many times each pair has partnered.</p>
+            @RenderMatrix(partnerMatrix, partnerMax)
+        </div>
+        <div class="col-md-6">
+            <h2 class="h5">Opponent Matrix</h2>
+            <p class="text-muted small">How many times each pair has opposed.</p>
+            @RenderMatrix(opponentMatrix, opponentMax)
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <h2 class="h5">Court Visits</h2>
+        <p class="text-muted small">How many times each player has played on each court.</p>
+        <table class="table table-sm table-bordered w-auto stats-table">
+            <thead>
+                <tr>
+                    <th></th>
+                    @foreach (var courtName in courtNames)
+                    {
+                        <th class="text-center">@courtName</th>
+                    }
+                    <th class="text-center">Byes</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in players)
+                {
+                    <tr>
+                        <th class="text-nowrap">@p.Name</th>
+                        @for (int c = 0; c < courtNames.Count; c++)
+                        {
+                            var count = courtVisits[p.Id][c];
+                            <td class="text-center">@(count == 0 ? "" : count.ToString())</td>
+                        }
+                        <td class="text-center">@(byeCounts[p.Id] == 0 ? "" : byeCounts[p.Id].ToString())</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<style>
+    .stats-table th, .stats-table td { padding: 0.25rem 0.5rem; }
+    .stats-matrix { border-collapse: collapse; }
+    .stats-matrix th, .stats-matrix td {
+        padding: 0.25rem 0.5rem;
+        border: 1px solid #dee2e6;
+        text-align: center;
+        min-width: 2.25rem;
+    }
+    .stats-matrix th { background: #f8f9fa; }
+    .stats-matrix td.diag { background: repeating-linear-gradient(45deg, #f1f3f5, #f1f3f5 4px, #fff 4px, #fff 8px); }
+</style>
+
+@code {
+    [Parameter] public int EventId { get; set; }
+
+    private Event? evt;
+    private List<Player> players = new();
+    private List<string> courtNames = new();
+
+    private int[,] partnerMatrix = new int[0, 0];
+    private int[,] opponentMatrix = new int[0, 0];
+    private Dictionary<int, int[]> courtVisits = new();
+    private Dictionary<int, int> byeCounts = new();
+    private int partnerMax;
+    private int opponentMax;
+
+    protected override async Task OnInitializedAsync()
+    {
+        evt = await EventService.GetByIdAsync(EventId);
+        if (evt == null) return;
+
+        courtNames = evt.GetCourtNamesList();
+        players = evt.EventPlayers
+            .Select(ep => ep.Player)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        var indexById = new Dictionary<int, int>();
+        for (int i = 0; i < players.Count; i++) indexById[players[i].Id] = i;
+
+        partnerMatrix = new int[players.Count, players.Count];
+        opponentMatrix = new int[players.Count, players.Count];
+        courtVisits = players.ToDictionary(p => p.Id, _ => new int[courtNames.Count]);
+        byeCounts = players.ToDictionary(p => p.Id, _ => 0);
+
+        foreach (var round in evt.Rounds)
+        {
+            foreach (var match in round.Matches)
+            {
+                IncrementPair(partnerMatrix, indexById, match.Team1Player1Id, match.Team1Player2Id);
+                IncrementPair(partnerMatrix, indexById, match.Team2Player1Id, match.Team2Player2Id);
+
+                var team1 = new[] { match.Team1Player1Id, match.Team1Player2Id };
+                var team2 = new[] { match.Team2Player1Id, match.Team2Player2Id };
+                foreach (var a in team1)
+                    foreach (var b in team2)
+                        IncrementPair(opponentMatrix, indexById, a, b);
+
+                var courtIdx = match.CourtNumber - 1;
+                if (courtIdx >= 0 && courtIdx < courtNames.Count)
+                    foreach (var pid in team1.Concat(team2))
+                        if (courtVisits.ContainsKey(pid)) courtVisits[pid][courtIdx]++;
+            }
+
+            foreach (var bye in round.Byes)
+                if (byeCounts.ContainsKey(bye.PlayerId)) byeCounts[bye.PlayerId]++;
+        }
+
+        partnerMax = MaxOf(partnerMatrix);
+        opponentMax = MaxOf(opponentMatrix);
+    }
+
+    private static void IncrementPair(int[,] matrix, Dictionary<int, int> indexById, int a, int b)
+    {
+        if (!indexById.TryGetValue(a, out var i) || !indexById.TryGetValue(b, out var j)) return;
+        matrix[i, j]++;
+        matrix[j, i]++;
+    }
+
+    private static int MaxOf(int[,] m)
+    {
+        int max = 0;
+        for (int i = 0; i < m.GetLength(0); i++)
+            for (int j = 0; j < m.GetLength(1); j++)
+                if (m[i, j] > max) max = m[i, j];
+        return max;
+    }
+
+    private RenderFragment RenderMatrix(int[,] matrix, int maxValue) => __builder =>
+    {
+        <div class="table-responsive">
+            <table class="stats-matrix">
+                <thead>
+                    <tr>
+                        <th></th>
+                        @foreach (var p in players)
+                        {
+                            <th title="@p.Name">@Initials(p.Name)</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (int i = 0; i < players.Count; i++)
+                    {
+                        var rowI = i;
+                        <tr>
+                            <th class="text-nowrap text-start" title="@players[rowI].Name" style="padding-right:0.5rem;">@players[rowI].Name</th>
+                            @for (int j = 0; j < players.Count; j++)
+                            {
+                                var colJ = j;
+                                if (rowI == colJ)
+                                {
+                                    <td class="diag"></td>
+                                }
+                                else
+                                {
+                                    var v = matrix[rowI, colJ];
+                                    <td style="@CellStyle(v, maxValue)">@(v == 0 ? "" : v.ToString())</td>
+                                }
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    };
+
+    private static string Initials(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "";
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 1) return parts[0][..Math.Min(2, parts[0].Length)].ToUpperInvariant();
+        return $"{char.ToUpperInvariant(parts[0][0])}{char.ToUpperInvariant(parts[^1][0])}";
+    }
+
+    private static string CellStyle(int value, int max)
+    {
+        if (value == 0 || max == 0) return "";
+        // Pale yellow-green at low values, deeper at high values. Stays readable on print.
+        var ratio = (double)value / max;
+        var alpha = 0.15 + 0.55 * ratio;  // 0.15..0.70
+        return $"background-color: rgba(13, 110, 253, {alpha:F2}); color: {(ratio > 0.6 ? "#fff" : "#212529")};";
+    }
+}
