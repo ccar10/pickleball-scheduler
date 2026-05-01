@@ -138,8 +138,17 @@
     .schedule-sheet {
         max-width: none;
         font-size: 9pt;
-        page-break-inside: avoid;
         border: 2px solid #000 !important;
+    }
+
+    /* When a multi-page schedule has to break, keep round rows intact and
+       repeat the column headers at the top of each page. */
+    .schedule-sheet .sheet-table tbody tr {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+    .schedule-sheet .sheet-table thead {
+        display: table-header-group;
     }
 
     .schedule-sheet .sheet-table td,
