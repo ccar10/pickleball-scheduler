@@ -39,6 +39,17 @@ internal static class WhistCyclicSchedule
                 Team2Player2Id = ResolveRole(bm.D, roundIndex, rotateMod, players),
             });
         }
+
+        // Rotate the matches list by roundIndex so the inf-containing match (always at
+        // baseRound[0]) cycles through positions across rounds. AssignCourts ties are
+        // broken lex-first; without this rotation, inf's match always sits at index 0
+        // and inf locks onto a single court for symmetric configs like 8p/2c.
+        if (matches.Count > 1)
+        {
+            var rotation = roundIndex % matches.Count;
+            if (rotation > 0)
+                matches = matches.Skip(rotation).Concat(matches.Take(rotation)).ToList();
+        }
         return matches;
     }
 
