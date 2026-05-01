@@ -338,8 +338,10 @@ public class ScheduleGenerator
         var courtIndices = Enumerable.Range(0, matches.Count).ToArray();
         var bestAssignment = (int[])courtIndices.Clone();
         var bestImbalance = int.MaxValue;
+        var bestSpread = int.MaxValue;
 
-        PermuteAndScore(courtIndices, 0, matches, courtCounts, ref bestAssignment, ref bestImbalance);
+        PermuteAndScore(courtIndices, 0, matches, courtCounts,
+            ref bestAssignment, ref bestImbalance, ref bestSpread);
 
         for (int i = 0; i < matches.Count; i++)
             matches[i].CourtNumber = bestAssignment[i] + 1;
@@ -347,14 +349,17 @@ public class ScheduleGenerator
 
     private static void PermuteAndScore(
         int[] courtIndices, int start, List<Match> matches,
-        Dictionary<int, int[]> courtCounts, ref int[] bestAssignment, ref int bestImbalance)
+        Dictionary<int, int[]> courtCounts,
+        ref int[] bestAssignment, ref int bestImbalance, ref int bestSpread)
     {
         if (start == courtIndices.Length)
         {
-            var imbalance = CalculateImbalance(courtIndices, matches, courtCounts);
-            if (imbalance < bestImbalance)
+            var (imbalance, spread) = CalculateImbalance(courtIndices, matches, courtCounts);
+            if (imbalance < bestImbalance ||
+                (imbalance == bestImbalance && spread < bestSpread))
             {
                 bestImbalance = imbalance;
+                bestSpread = spread;
                 bestAssignment = (int[])courtIndices.Clone();
             }
             return;
@@ -363,14 +368,24 @@ public class ScheduleGenerator
         for (int i = start; i < courtIndices.Length; i++)
         {
             (courtIndices[start], courtIndices[i]) = (courtIndices[i], courtIndices[start]);
-            PermuteAndScore(courtIndices, start + 1, matches, courtCounts, ref bestAssignment, ref bestImbalance);
+            PermuteAndScore(courtIndices, start + 1, matches, courtCounts,
+                ref bestAssignment, ref bestImbalance, ref bestSpread);
             (courtIndices[start], courtIndices[i]) = (courtIndices[i], courtIndices[start]);
         }
     }
 
-    private static int CalculateImbalance(int[] courtIndices, List<Match> matches, Dictionary<int, int[]> courtCounts)
+    /// <summary>
+    /// Returns (totalImbalance, spreadAfter) for an assignment.
+    /// totalImbalance = sum over playing players of their prior count on the court they're being put on.
+    /// spreadAfter = sum over playing players of (max - min) of their per-court counts after this round
+    /// would be applied. Used as a tie-breaker so a player stuck on one court gets variety even when
+    /// totals are equal.
+    /// </summary>
+    private static (int total, int spread) CalculateImbalance(
+        int[] courtIndices, List<Match> matches, Dictionary<int, int[]> courtCounts)
     {
         int total = 0;
+        int spread = 0;
         for (int i = 0; i < matches.Count; i++)
         {
             var courtIdx = courtIndices[i];
@@ -379,10 +394,21 @@ public class ScheduleGenerator
                 matches[i].Team2Player1Id, matches[i].Team2Player2Id
             };
             foreach (var pid in playerIds)
-                if (courtCounts.TryGetValue(pid, out var counts) && courtIdx < counts.Length)
-                    total += counts[courtIdx];
+            {
+                if (!courtCounts.TryGetValue(pid, out var counts) || courtIdx >= counts.Length) continue;
+                total += counts[courtIdx];
+
+                int max = 0, min = int.MaxValue;
+                for (int c = 0; c < counts.Length; c++)
+                {
+                    int v = counts[c] + (c == courtIdx ? 1 : 0);
+                    if (v > max) max = v;
+                    if (v < min) min = v;
+                }
+                spread += max - min;
+            }
         }
-        return total;
+        return (total, spread);
     }
 
     public static string PairKey(int a, int b)
