@@ -15,14 +15,37 @@ The proper fix is to include explicit per-round, per-match court labels as part 
 
 ## Goals
 
-1. For each Whist size in `{8, 12, 16, 20, 24}`, every player's court-visit spread is `≤ 1` across the `n − 1`-round Whist cycle.
+1. For each Whist size in `{12, 16, 20, 24}`, every player's court-visit spread is `≤ 1` across the `n − 1`-round Whist cycle.
 2. The fix is data-driven: court labels are hardcoded alongside base rounds, transcribed from a one-shot brute-force search living in the test project (same pattern as the existing base-round discovery).
-3. A new unit test verifies the balance invariant for all 5 sizes; transcription bugs are caught at build time.
+3. A new unit test verifies the balance invariant for all four covered sizes; transcription bugs are caught at build time.
 4. Schedules generated under non-Whist conditions are unaffected — the existing joint-search and `AssignCourts` paths handle them as today.
+
+## Status: Closed Without Production Change
+
+Implementation work proved that **cyclic Whist + per-player court spread ≤ 1 is structurally incompatible** at the smallest two sizes, and intractable to evaluate at the larger three within a reasonable compute budget. No production code changed; the search infrastructure was committed behind `[Theory(Skip="…")]` for future use. Findings:
+
+### Wh(8) — Provably Impossible
+
+In Wh(8), match 0's role-set is forced (by the partner-once / oppose-twice invariants) to be a (7, 3, 1) difference set in Z/7, i.e., a line of the Fano plane. Each non-`∞` player is in match 0 for a fixed 3-round subset (the orbit of their role under cyclic rotation). For per-player spread ≤ 1 the set `S` of "rounds match 0 plays court 0" would need `|R_j ∩ S| = 1` for every line `R_j`, but the Fano-plane incidence structure makes this impossible: with `|S| = 3`, exactly one Fano line is disjoint from `S` (a player at that role goes 1-6); with `|S| = 4`, `S` either contains a line entirely (a player goes 6-1) or is the complement of one (a player goes 0-7). Symmetric cases for other `|S|` likewise fail. The best achievable cyclic Wh(8) labeling gives spread 5 — a marginal improvement over today's (7, 0) that still leaves a stuck player. Not worth hardcoding.
+
+### Wh(12) — Exhaustively Confirmed Impossible
+
+A joint search enumerated all 220 distinct valid Wh(12) base rounds and ran an exhaustive court-label search against each. None admit a labeling with per-player spread ≤ 1. Cyclic Wh(12) is empirically as constrained as Wh(8), even after exhausting the alternative-base-round space.
+
+### Wh(16, 20, 24) — Status Indeterminate
+
+Inner court-label search is intractable per base round within a 30 minute wall-clock budget (`24¹⁵ / 120¹⁹ / 720²³` raw permutation trees with insufficient pruning). Could not determine feasibility within budget. A future attempt with sharper look-ahead pruning, or hours-to-days of compute per size, may resolve these.
+
+### Outcome
+
+All sizes continue to use the existing `AssignCourts` path; today's behavior is unchanged. The `WhistCyclicScheduleTests.GenerateBalancedSchedule` skipped Theory captures the full search infrastructure (base-round enumerator, court-label search with corrected `applied`-list undo, transcript helper) — a future contributor working on this can pick up directly without re-discovering the impossibility results above.
+
+A future re-architecture using non-cyclic Whist or hand-tuned schedule families could fix the court-balance issue without violating the partner-once / oppose-twice invariants, but is out of scope for this spec.
 
 ## Non-Goals
 
-- Best effort with verification: if a particular size genuinely cannot achieve `spread ≤ 1` even after a joint search for `(base round, court labels)` (Q1 answer was option B), we accept `spread ≤ 2` for that size with a documented exception in the test.
+- Best effort with verification: if a particular size in `{12, 16, 20, 24}` genuinely cannot achieve `spread ≤ 1` even after a joint search for `(base round, court labels)` (Q1 answer was option B), we accept `spread ≤ 2` for that size with a documented exception in the test.
+- No labels for Wh(8) (see "Wh(8) Excluded" above).
 - No randomness / variation per event in court labels — labels are deterministic per size, like the base rounds. The per-event input shuffle continues to randomize which player ends up at `∞` and other roles.
 - No changes to the joint-search algorithm, the distribution test, the stats page, or the persistence model.
 
