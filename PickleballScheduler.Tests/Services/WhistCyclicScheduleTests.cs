@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text;
 using PickleballScheduler.Models;
 using PickleballScheduler.Services;
 
@@ -110,24 +112,20 @@ public class WhistCyclicScheduleTests
     /// </summary>
     internal static List<string[]>? BruteForceBaseRound(int n)
     {
-        // Strategy: pick the inf match and the remaining (k-1) integer matches such
-        // that:
-        //   (1) Every integer in 0..n-2 appears exactly once (4k - 1 = n - 1 slots).
-        //   (2) Partner differences (one per partner pair, taken mod (n-1) as
-        //       d -> min(d, n-1-d)) cover each value 1..(n-2)/2 exactly once.
-        //   (3) Opponent differences (one per opponent pair) cover each value
-        //       1..(n-2)/2 exactly twice.
+        return EnumerateValidBaseRounds(n).FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Enumerates valid Whist base rounds for Wh(n). Each yielded value is a list
+    /// of match descriptors as in <see cref="BruteForceBaseRound"/>. The first
+    /// yielded element is the same as <see cref="BruteForceBaseRound"/>'s return.
+    /// </summary>
+    internal static IEnumerable<List<string[]>> EnumerateValidBaseRounds(int n)
+    {
         int k = n / 4;
         int m = n - 1;
-        int half = m / 2; // (m-1)/2 since m is odd; covers 1..half
+        int half = m / 2;
 
-        // The inf match has form (inf, a) vs (b, c). 'a' partners inf and gets
-        // covered by inf rotation; the integer partner pair in this match is (b,c).
-        // Opponents in this match are (inf,b), (inf,c), (a,b), (a,c) -> integer
-        // diffs |a-b|, |a-c|.
-
-        // Enumerate the inf match systematically: choose unordered triple {a,b,c}.
-        // Then for each, search the remaining 4(k-1) integers for a valid partition.
         for (int infA = 0; infA < m; infA++)
         {
             for (int infB = 0; infB < m; infB++)
@@ -136,9 +134,6 @@ public class WhistCyclicScheduleTests
                 for (int infC = infB + 1; infC < m; infC++)
                 {
                     if (infC == infA) continue;
-                    // Avoid permutation duplicates: require infB < infC (already)
-                    // and we'll try both orderings of (b,c) implicitly later via
-                    // partner pair (b,c).
                     var infPartnerDiff = NormDiff(infB, infC, m);
                     var infOppDiff1 = NormDiff(infA, infB, m);
                     var infOppDiff2 = NormDiff(infA, infC, m);
@@ -154,55 +149,54 @@ public class WhistCyclicScheduleTests
                     oppSeen[infOppDiff2]++;
                     if (partnerSeen[infPartnerDiff] > 1) continue;
 
-                    var matches = new List<int[]>();
-                    if (SearchMatches(remaining, k - 1, partnerSeen, oppSeen, half, m, matches))
+                    var output = new List<int[]>();
+                    foreach (var _ in EnumerateInner(remaining, k - 1, partnerSeen, oppSeen, half, m, output))
                     {
                         var result = new List<string[]>
                         {
                             new[] { "inf", infA.ToString(), infB.ToString(), infC.ToString() }
                         };
-                        foreach (var match in matches)
+                        foreach (var match in output)
                             result.Add(new[]
                             {
                                 match[0].ToString(), match[1].ToString(),
                                 match[2].ToString(), match[3].ToString(),
                             });
-                        return result;
+                        yield return result;
                     }
                 }
             }
         }
-        return null;
     }
 
-    private static bool SearchMatches(List<int> pool, int matchesLeft,
+    /// <summary>
+    /// Generator equivalent of <c>SearchMatches</c>. Yields a sentinel value (true)
+    /// each time a complete valid arrangement is reached; on each yield, <paramref name="output"/>
+    /// holds the current valid match list. Caller must read it before continuing iteration.
+    /// </summary>
+    private static IEnumerable<bool> EnumerateInner(List<int> pool, int matchesLeft,
         int[] partnerSeen, int[] oppSeen, int half, int m,
         List<int[]> output)
     {
         if (matchesLeft == 0)
         {
-            // Verify final state: partners hit each diff once, opponents hit each twice.
             for (int d = 1; d <= half; d++)
             {
-                if (partnerSeen[d] != 1) return false;
-                if (oppSeen[d] != 2) return false;
+                if (partnerSeen[d] != 1) yield break;
+                if (oppSeen[d] != 2) yield break;
             }
-            return true;
+            yield return true;
+            yield break;
         }
 
-        // Take the smallest remaining number as 'a' (canonicalize).
         var sorted = pool.OrderBy(x => x).ToList();
         int a = sorted[0];
 
-        // Try each combination of 3 other elements as (b, c, d) with team (a,b) vs (c,d).
-        // For each unordered choice of 3 elements, there are 3 ways to split into
-        // partner b and opponents (c,d). We try all 3.
         for (int i = 1; i < sorted.Count; i++)
         for (int j = i + 1; j < sorted.Count; j++)
         for (int l = j + 1; l < sorted.Count; l++)
         {
             int[] others = { sorted[i], sorted[j], sorted[l] };
-            // Three ways: partner = others[0], others[1], or others[2].
             for (int pIdx = 0; pIdx < 3; pIdx++)
             {
                 int b = others[pIdx];
@@ -217,10 +211,9 @@ public class WhistCyclicScheduleTests
                 int od4 = NormDiff(b, d, m);
 
                 if (partnerSeen[pd1] >= 1) continue;
-                if (pd1 == pd2) continue; // would push partnerSeen[pd1] to 2
+                if (pd1 == pd2) continue;
                 if (partnerSeen[pd2] >= 1) continue;
 
-                // Check opponent capacity feasibility before mutating.
                 var localOpp = new int[] { od1, od2, od3, od4 };
                 var oppDelta = new int[half + 1];
                 bool ok = true;
@@ -238,8 +231,8 @@ public class WhistCyclicScheduleTests
                 var newPool = pool.Where(x => x != a && x != b && x != c && x != d).ToList();
                 output.Add(new[] { a, b, c, d });
 
-                if (SearchMatches(newPool, matchesLeft - 1, partnerSeen, oppSeen, half, m, output))
-                    return true;
+                foreach (var sentinel in EnumerateInner(newPool, matchesLeft - 1, partnerSeen, oppSeen, half, m, output))
+                    yield return sentinel;
 
                 output.RemoveAt(output.Count - 1);
                 partnerSeen[pd1]--;
@@ -247,12 +240,216 @@ public class WhistCyclicScheduleTests
                 foreach (var od in localOpp) oppSeen[od]--;
             }
         }
-        return false;
     }
 
     private static int NormDiff(int x, int y, int m)
     {
         int d = Math.Abs(x - y) % m;
         return Math.Min(d, m - d);
+    }
+
+    // ----- Joint (base round, court labels) search -----
+
+    /// <summary>
+    /// One-shot joint generator: enumerates Whist base rounds, and for each tries
+    /// to find a per-round court labeling such that every player's court-visit
+    /// spread is ≤ 1. Spends up to 30 minutes wall-clock per size. On success,
+    /// emits a paste-ready C# transcript via <see cref="Assert.Fail"/>; on budget
+    /// exhaustion, fails with a "no balanced pair found" message.
+    /// Re-skip after harvesting outputs.
+    /// </summary>
+    [Theory(Skip = "one-shot generator; remove Skip to regenerate balanced (base round, court labels)")]
+    [InlineData(12)]
+    [InlineData(16)]
+    [InlineData(20)]
+    [InlineData(24)]
+    public void GenerateBalancedSchedule(int playerCount)
+    {
+        int n = playerCount;
+        int courts = n / 4;
+        int rounds = n - 1;
+        int ceiling = (rounds + courts - 1) / courts; // ceil((n-1) / (n/4))
+        var perms = AllPermutations(courts);
+
+        var budget = TimeSpan.FromMinutes(30);
+        var sw = Stopwatch.StartNew();
+        int candidatesTried = 0;
+
+        foreach (var baseRound in EnumerateValidBaseRounds(n))
+        {
+            if (sw.Elapsed >= budget) break;
+            candidatesTried++;
+
+            var matchups = BuildAllRoundMatchups(baseRound, n);
+
+            // Per-player per-court visit counts; player ids are 1..n.
+            var visits = new Dictionary<int, int[]>();
+            for (int pid = 1; pid <= n; pid++) visits[pid] = new int[courts];
+
+            var labels = new int[rounds][];
+            for (int r = 0; r < rounds; r++) labels[r] = new int[courts];
+
+            if (TrySearchWithBudget(0, matchups, perms, visits, ceiling, labels, sw, budget))
+            {
+                EmitTranscript(n, baseRound, labels, candidatesTried, sw.Elapsed);
+                return;
+            }
+        }
+
+        Assert.Fail(
+            $"Wh({n}): no balanced (base round, court labels) pair found within budget. " +
+            $"Tried {candidatesTried} base rounds; elapsed {sw.Elapsed.TotalMinutes:F1} min.");
+    }
+
+    /// <summary>
+    /// Builds the full <c>n-1</c> rounds of matchups from a base round descriptor.
+    /// Each Match is represented as a 4-tuple of player ids; player 1 is "inf",
+    /// players 2..n are roles 0..n-2 under cyclic rotation mod n-1.
+    /// </summary>
+    private static List<List<(int p0, int p1, int p2, int p3)>> BuildAllRoundMatchups(
+        List<string[]> baseRound, int n)
+    {
+        var rotateMod = n - 1;
+        var rounds = new List<List<(int, int, int, int)>>(n - 1);
+        for (int r = 0; r < n - 1; r++)
+        {
+            var matches = new List<(int, int, int, int)>(baseRound.Count);
+            foreach (var bm in baseRound)
+            {
+                int Resolve(string role) =>
+                    role == "inf" ? 1 : 2 + ((int.Parse(role) + r) % rotateMod);
+                matches.Add((Resolve(bm[0]), Resolve(bm[1]), Resolve(bm[2]), Resolve(bm[3])));
+            }
+            rounds.Add(matches);
+        }
+        return rounds;
+    }
+
+    private static bool TrySearchWithBudget(int round,
+        List<List<(int p0, int p1, int p2, int p3)>> matchups,
+        List<int[]> perms, Dictionary<int, int[]> visits, int ceiling, int[][] labels,
+        Stopwatch sw, TimeSpan budget)
+    {
+        if (sw.Elapsed >= budget) return false;
+
+        if (round == matchups.Count)
+        {
+            foreach (var counts in visits.Values)
+                if (counts.Max() - counts.Min() > 1) return false;
+            return true;
+        }
+
+        var matches = matchups[round];
+
+        foreach (var perm in OrderPermutations(perms, matches, visits))
+        {
+            if (sw.Elapsed >= budget) return false;
+
+            var applied = new List<(int pid, int ci)>();
+            bool ok = true;
+            for (int i = 0; i < matches.Count && ok; i++)
+            {
+                var ci = perm[i];
+                foreach (var pid in PlayerIds(matches[i]))
+                {
+                    visits[pid][ci]++;
+                    applied.Add((pid, ci));
+                    if (visits[pid][ci] > ceiling) ok = false;
+                }
+            }
+
+            if (ok)
+            {
+                Array.Copy(perm, labels[round], perm.Length);
+                if (TrySearchWithBudget(round + 1, matchups, perms, visits, ceiling, labels, sw, budget)) return true;
+            }
+
+            foreach (var (pid, ci) in applied) visits[pid][ci]--;
+        }
+
+        return false;
+    }
+
+    private static List<int[]> AllPermutations(int n)
+    {
+        var result = new List<int[]>();
+        var current = Enumerable.Range(0, n).ToArray();
+        PermuteRecursive(current, 0, result);
+        return result;
+    }
+
+    private static void PermuteRecursive(int[] arr, int start, List<int[]> result)
+    {
+        if (start == arr.Length)
+        {
+            result.Add((int[])arr.Clone());
+            return;
+        }
+        for (int i = start; i < arr.Length; i++)
+        {
+            (arr[start], arr[i]) = (arr[i], arr[start]);
+            PermuteRecursive(arr, start + 1, result);
+            (arr[start], arr[i]) = (arr[i], arr[start]);
+        }
+    }
+
+    private static IEnumerable<int> PlayerIds((int p0, int p1, int p2, int p3) match)
+    {
+        yield return match.p0;
+        yield return match.p1;
+        yield return match.p2;
+        yield return match.p3;
+    }
+
+    /// <summary>
+    /// Heuristic: try permutations in order of how well they balance the most
+    /// disadvantaged player (greatest current spread). Best (lowest spread-after)
+    /// first.
+    /// </summary>
+    private static IEnumerable<int[]> OrderPermutations(List<int[]> perms,
+        List<(int p0, int p1, int p2, int p3)> matches, Dictionary<int, int[]> visits)
+    {
+        return perms.OrderBy(perm => ScorePerm(perm, matches, visits));
+    }
+
+    private static long ScorePerm(int[] perm,
+        List<(int p0, int p1, int p2, int p3)> matches, Dictionary<int, int[]> visits)
+    {
+        long sum = 0;
+        for (int i = 0; i < matches.Count; i++)
+        {
+            var ci = perm[i];
+            foreach (var pid in PlayerIds(matches[i]))
+            {
+                // Cost = current count on the court we'd put this player on.
+                // Lower is better — bias toward courts where the player has been least.
+                sum += visits[pid][ci];
+            }
+        }
+        return sum;
+    }
+
+    private static void EmitTranscript(int n, List<string[]> baseRound, int[][] labels,
+        int candidatesTried, TimeSpan elapsed)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"// Wh({n}) — balanced (base round, court labels) pair found.");
+        sb.AppendLine($"// Tried {candidatesTried} base rounds in {elapsed.TotalMinutes:F2} minutes.");
+        sb.AppendLine();
+        sb.AppendLine($"// Replace BaseRounds[{n}] with:");
+        sb.AppendLine($"[{n}] = new[]");
+        sb.AppendLine("{");
+        foreach (var m in baseRound)
+            sb.AppendLine($"    new BaseMatch(\"{m[0]}\", \"{m[1]}\", \"{m[2]}\", \"{m[3]}\"),");
+        sb.AppendLine("},");
+        sb.AppendLine();
+        sb.AppendLine($"// Add to CourtLabels[{n}]:");
+        sb.AppendLine($"[{n}] = new int[][]");
+        sb.AppendLine("{");
+        foreach (var row in labels)
+            sb.AppendLine($"    new int[] {{ {string.Join(", ", row)} }},");
+        sb.AppendLine("},");
+
+        Assert.Fail(sb.ToString());
     }
 }
