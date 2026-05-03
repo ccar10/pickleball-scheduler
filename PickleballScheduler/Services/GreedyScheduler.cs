@@ -93,6 +93,10 @@ public static class GreedyScheduler
                 }
             }
 
+            if (bestPair.c is null || bestPair.d is null)
+                throw new InvalidOperationException(
+                    $"No opponent pair found; active={active.Count}, used={used.Count}");
+
             // Pick court: minimize sum of prior courtCount across the 4 players.
             int bestCourt = unusedCourts[0];
             int bestCourtScore = int.MaxValue;
