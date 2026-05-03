@@ -4,6 +4,7 @@ namespace PickleballScheduler.Services;
 
 public static class CanonicalSchedules
 {
+    /// <summary>Number of rounds in each canonical schedule table.</summary>
     public const int RoundCount = 30;
 
     private static readonly HashSet<(int players, int courts)> CanonicalPairs = new()
@@ -24,12 +25,16 @@ public static class CanonicalSchedules
 
     /// <summary>
     /// Returns the matches for round <paramref name="roundIndex"/> (0-based) at the given size,
-    /// resolved against <paramref name="players"/>. Caller must ensure <c>IsCanonical</c> is true.
+    /// resolved against <paramref name="players"/>. Caller must ensure <c>IsCanonical</c> is true;
+    /// if not, this method throws <see cref="InvalidOperationException"/> or <see cref="ArgumentOutOfRangeException"/>.
     /// </summary>
     public static List<Match> GetRound(int playerCount, int roundIndex, List<Player> players)
     {
         if (!Schedules.TryGetValue(playerCount, out var table))
             throw new InvalidOperationException($"No table for {playerCount} players");
+        if (table.Length == 0)
+            throw new InvalidOperationException(
+                $"Table for {playerCount} players is not yet populated; check IsCanonical first.");
         if (roundIndex < 0 || roundIndex >= table.Length)
             throw new ArgumentOutOfRangeException(nameof(roundIndex));
         if (players.Count != playerCount)
