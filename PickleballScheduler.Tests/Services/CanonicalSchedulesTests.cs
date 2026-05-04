@@ -71,7 +71,8 @@ public class CanonicalSchedulesTests
             if (r > 0)
             {
                 var overlap = prev.Intersect(current).ToList();
-                Assert.Empty(overlap);
+                Assert.True(overlap.Count == 0,
+                    $"round {r}: partner pair(s) repeated from previous round: {string.Join(", ", overlap)}");
             }
             prev = current;
         }
@@ -96,7 +97,9 @@ public class CanonicalSchedulesTests
                 Increment(partnerCounts, m.Team2Player1Id, m.Team2Player2Id);
             }
         }
-        // Every pair appears at least once if 30 rounds covers them; spread = max - min over actual counts.
+        // Spread is computed over pairs that partnered at least once. For n=24, 30 rounds can't
+        // cover all C(24,2)=276 pairs (only 180 partnership slots), so missing pairs are absent
+        // from the dictionary by design — not a bug.
         var max = partnerCounts.Values.Max();
         var min = partnerCounts.Values.Min();
         Assert.True(max - min <= 1, $"partner spread {max - min}: max={max}, min={min}");
