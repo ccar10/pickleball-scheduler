@@ -102,7 +102,8 @@ public class ScheduleGeneratorTests
                 partnerships[pair2] = partnerships.GetValueOrDefault(pair2) + 1;
             }
         }
-        Assert.True(partnerships.Values.Max() <= 1, "no pair partners more than once in 4 rounds");
+        Assert.All(partnerships.Values, count =>
+            Assert.True(count <= 1, $"pair partnered {count} times in 4 rounds"));
     }
 
     [Fact]
