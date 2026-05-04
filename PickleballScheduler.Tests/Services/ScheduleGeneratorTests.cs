@@ -233,9 +233,9 @@ public class ScheduleGeneratorTests
     }
 
     [Fact]
-    public void Generate_10Players_2Courts_9Rounds_FallsBackToJointSearch()
+    public void Generate_10Players_2Courts_9Rounds_GreedyFallback()
     {
-        // 10 is not a Whist size; the joint search should handle it without exceptions.
+        // 10 is not a canonical size; the greedy scheduler should handle it without exceptions.
         var players = MakePlayers(10);
         var generator = new ScheduleGenerator();
 
