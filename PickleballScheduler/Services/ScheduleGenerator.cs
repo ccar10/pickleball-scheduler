@@ -9,116 +9,28 @@ public class ScheduleGenerator
 
     public ScheduleResult Generate(List<Player> players, int numberOfCourts, int numberOfRounds)
     {
-        var matchesPerRound = Math.Min(numberOfCourts, players.Count / 4);
-        var playersPerRound = matchesPerRound * 4;
-        var partnerCounts = new Dictionary<string, int>();
-        var opponentCounts = new Dictionary<string, int>();
-        var courtCounts = new Dictionary<int, int[]>();
-        var byeCounts = players.ToDictionary(p => p.Id, _ => 0);
-        var rounds = new List<Round>();
+        if (CanonicalSchedules.IsCanonical(players.Count, numberOfCourts))
+            return new ScheduleResult(GenerateFromTable(players, numberOfCourts, numberOfRounds), 0, 0, null);
 
-        foreach (var p in players)
+        return new ScheduleResult(
+            GreedyScheduler.Generate(players, numberOfCourts, numberOfRounds), 0, 0, null);
+    }
+
+    private static List<Round> GenerateFromTable(List<Player> players, int courts, int rounds)
+    {
+        var output = new List<Round>(rounds);
+        int max = Math.Min(rounds, CanonicalSchedules.RoundCount);
+        for (int r = 0; r < max; r++)
         {
-            courtCounts[p.Id] = new int[matchesPerRound];
-        }
-
-        int hr1Violations = 0;
-        int hr2Violations = 0;
-        var lastOpponentRound = new Dictionary<string, int>();
-
-        for (int r = 0; r < numberOfRounds; r++)
-        {
-            var activePlayers = SelectActivePlayers(players, playersPerRound, byeCounts);
-            var byePlayers = players.Where(p => !activePlayers.Contains(p)).ToList();
-
-            List<Match> matches;
-            bool useWhist =
-                WhistCyclicSchedule.IsSupportedSize(players.Count) &&
-                numberOfCourts >= players.Count / 4 &&
-                numberOfRounds >= players.Count - 1 &&
-                r < players.Count - 1;
-
-            if (useWhist)
-            {
-                matches = WhistCyclicSchedule.GetRoundMatchups(players, r);
-                AssignCourts(matches, courtCounts, matchesPerRound);
-            }
-            else
-            {
-                var roundResult = BuildRound(activePlayers, players, partnerCounts, opponentCounts,
-                    lastOpponentRound, courtCounts, r, matchesPerRound);
-                matches = roundResult.Matches;
-            }
-
-            // HR1: forced repeats — pair partner count was strictly greater than the
-            // minimum partner count among pairs sharing a player with this pair, BEFORE this round.
-            foreach (var match in matches)
-            {
-                foreach (var pair in new[] {
-                    (match.Team1Player1Id, match.Team1Player2Id),
-                    (match.Team2Player1Id, match.Team2Player2Id) })
-                {
-                    if (IsHr1Violation(pair.Item1, pair.Item2, players, partnerCounts))
-                        hr1Violations++;
-                }
-            }
-
-            // HR2: opponent pair faced in the immediately previous round.
-            foreach (var match in matches)
-            {
-                var team1 = new[] { match.Team1Player1Id, match.Team1Player2Id };
-                var team2 = new[] { match.Team2Player1Id, match.Team2Player2Id };
-                foreach (var p1 in team1)
-                    foreach (var p2 in team2)
-                        if (IsHr2Violation(p1, p2, lastOpponentRound, r))
-                            hr2Violations++;
-            }
-
-            // Tracking update — MUST run after the HR1/HR2 counting blocks above,
-            // which read partnerCounts and lastOpponentRound at their pre-round values.
-            foreach (var match in matches)
-            {
-                var t1p1 = match.Team1Player1Id;
-                var t1p2 = match.Team1Player2Id;
-                var t2p1 = match.Team2Player1Id;
-                var t2p2 = match.Team2Player2Id;
-
-                // Partner counts
-                var pk1 = PairKey(t1p1, t1p2);
-                var pk2 = PairKey(t2p1, t2p2);
-                partnerCounts[pk1] = partnerCounts.GetValueOrDefault(pk1) + 1;
-                partnerCounts[pk2] = partnerCounts.GetValueOrDefault(pk2) + 1;
-
-                // Opponent counts
-                var team1 = new[] { t1p1, t1p2 };
-                var team2 = new[] { t2p1, t2p2 };
-                foreach (var p1 in team1)
-                    foreach (var p2 in team2)
-                    {
-                        var ok = PairKey(p1, p2);
-                        opponentCounts[ok] = opponentCounts.GetValueOrDefault(ok) + 1;
-                        lastOpponentRound[ok] = r;
-                    }
-
-                // Court counts
-                var courtIdx = match.CourtNumber - 1;
-                foreach (var pid in team1.Concat(team2))
-                    if (courtCounts.ContainsKey(pid) && courtIdx < courtCounts[pid].Length)
-                        courtCounts[pid][courtIdx]++;
-            }
-
-            foreach (var bp in byePlayers)
-                byeCounts[bp.Id]++;
-
-            rounds.Add(new Round
+            var matches = CanonicalSchedules.GetRound(players.Count, r, players);
+            output.Add(new Round
             {
                 RoundNumber = r + 1,
                 Matches = matches,
-                Byes = byePlayers.Select(p => new Bye { PlayerId = p.Id }).ToList()
+                Byes = new List<Bye>(),
             });
         }
-
-        return new ScheduleResult(rounds, hr1Violations, hr2Violations, RepeatSuggestion: null);
+        return output;
     }
 
     private static List<Player> SelectActivePlayers(List<Player> players, int needed, Dictionary<int, int> byeCounts)
