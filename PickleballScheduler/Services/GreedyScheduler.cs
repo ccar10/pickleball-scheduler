@@ -2,13 +2,20 @@ using PickleballScheduler.Models;
 
 namespace PickleballScheduler.Services;
 
+/// <summary>
+/// Greedy round-by-round matchup picker plus shared court-permutation and counter-update helpers.
+/// Used as a primary path for off-canonical configs and as a continuation for canonical configs
+/// past round n-1 (after the Whist cycle is exhausted).
+/// </summary>
 public static class GreedyScheduler
 {
+    /// <summary>
+    /// Top-level entry — produces a complete schedule by greedy matchup selection per round,
+    /// followed by per-round court permutation. Used by the dispatcher when Whist isn't applicable.
+    /// </summary>
     public static List<Round> Generate(List<Player> players, int courts, int rounds)
     {
         var matchesPerRound = Math.Min(courts, players.Count / 4);
-        var playersPerRound = matchesPerRound * 4;
-
         var partnerCount = new Dictionary<string, int>();
         var opponentCount = new Dictionary<string, int>();
         var courtCount = players.ToDictionary(p => p.Id, _ => new int[matchesPerRound]);
@@ -18,11 +25,13 @@ public static class GreedyScheduler
 
         for (int r = 0; r < rounds; r++)
         {
-            var active = SelectActive(players, playersPerRound, byeCount);
+            var active = SelectActive(players, matchesPerRound * 4, byeCount);
             var byes = players.Where(p => !active.Contains(p)).ToList();
 
-            var matches = BuildRound(active, partnerCount, opponentCount, courtCount, matchesPerRound);
-
+            var matches = BuildOneRound(active, partnerCount, opponentCount, matchesPerRound);
+            // For greedy matchups the structure changes round-to-round; the cyclic-shift tiebreak
+            // (designed for symmetric Whist matchups) tends to make worse choices here, so disable it.
+            AssignCourtsToRound(matches, courtCount, matchesPerRound, r, useCyclicShiftTiebreak: false);
             UpdateCounters(matches, partnerCount, opponentCount, courtCount);
             foreach (var b in byes) byeCount[b.Id]++;
 
@@ -36,7 +45,10 @@ public static class GreedyScheduler
         return output;
     }
 
-    private static List<Player> SelectActive(List<Player> players, int needed, Dictionary<int, int> byeCount)
+    /// <summary>
+    /// Bye rotation: among the requested player count, prefer those with the most accumulated byes.
+    /// </summary>
+    internal static List<Player> SelectActive(List<Player> players, int needed, Dictionary<int, int> byeCount)
     {
         if (needed >= players.Count) return new List<Player>(players);
         return players
@@ -46,17 +58,19 @@ public static class GreedyScheduler
             .ToList();
     }
 
-    private static List<Match> BuildRound(
+    /// <summary>
+    /// Picks matches for one round given the current partner/opponent counts. Returns matches with
+    /// no CourtNumber set — the caller is responsible for calling <see cref="AssignCourtsToRound"/>.
+    /// </summary>
+    internal static List<Match> BuildOneRound(
         List<Player> active,
         Dictionary<string, int> partnerCount,
         Dictionary<string, int> opponentCount,
-        Dictionary<int, int[]> courtCount,
         int matchesPerRound)
     {
         var used = new HashSet<int>();
-        var seats = new List<(int a, int b, int c, int d)>(matchesPerRound);
+        var matches = new List<Match>(matchesPerRound);
 
-        // Phase 1: pick partners and opponents for each match (no court yet).
         for (int slot = 0; slot < matchesPerRound; slot++)
         {
             var a = active.First(p => !used.Contains(p.Id));
@@ -94,40 +108,50 @@ public static class GreedyScheduler
                 throw new InvalidOperationException(
                     $"No opponent pair found; active={active.Count}, used={used.Count}");
 
-            seats.Add((a.Id, b.Id, bestPair.c.Id, bestPair.d.Id));
+            matches.Add(new Match
+            {
+                Team1Player1Id = a.Id,
+                Team1Player2Id = b.Id,
+                Team2Player1Id = bestPair.c.Id,
+                Team2Player2Id = bestPair.d.Id,
+            });
             used.Add(a.Id);
             used.Add(b.Id);
             used.Add(bestPair.c.Id);
             used.Add(bestPair.d.Id);
         }
 
-        // Phase 2: assign court labels by trying all matchesPerRound! permutations and picking the
-        // one that minimizes the worst player's post-round court spread (sum of spreads as tiebreak).
-        // matchesPerRound <= 6 in practice so the factorial is small (max 720).
-        int[] bestAssignment = AssignCourts(seats, courtCount, matchesPerRound);
-
-        var matches = new List<Match>(matchesPerRound);
-        for (int i = 0; i < seats.Count; i++)
-        {
-            var s = seats[i];
-            matches.Add(new Match
-            {
-                Team1Player1Id = s.a,
-                Team1Player2Id = s.b,
-                Team2Player1Id = s.c,
-                Team2Player2Id = s.d,
-                CourtNumber = bestAssignment[i] + 1,
-            });
-        }
         return matches;
     }
 
-    private static int[] AssignCourts(
-        List<(int a, int b, int c, int d)> seats,
+    /// <summary>
+    /// Sets <see cref="Match.CourtNumber"/> on each match by trying all matchesPerRound!
+    /// permutations of court indices and choosing the one that minimizes the worst player's
+    /// post-round court spread. matchesPerRound &lt;= 6 in practice so the factorial is small (max 720).
+    ///
+    /// When permutations tie on cost (common for symmetric Whist matchups, e.g. Wh(8) where the
+    /// "infinity" player sits in match 0 every round), the tiebreak prefers a cyclic-shift
+    /// assignment driven by <paramref name="roundIndex"/>, so a player consistently in the same
+    /// match position cycles through all courts rather than getting stuck on one.
+    /// </summary>
+    internal static void AssignCourtsToRound(
+        List<Match> matches,
         Dictionary<int, int[]> courtCount,
-        int courts)
+        int matchesPerRound,
+        int roundIndex,
+        bool useCyclicShiftTiebreak)
     {
-        if (seats.Count <= 1) return new[] { 0 };
+        if (matches.Count == 0) return;
+
+        if (matches.Count == 1)
+        {
+            matches[0].CourtNumber = 1;
+            return;
+        }
+
+        var seats = matches
+            .Select(m => (m.Team1Player1Id, m.Team1Player2Id, m.Team2Player1Id, m.Team2Player2Id))
+            .ToList();
 
         var perm = Enumerable.Range(0, seats.Count).ToArray();
         var bestPerm = (int[])perm.Clone();
@@ -135,7 +159,7 @@ public static class GreedyScheduler
 
         do
         {
-            long score = ScorePermutation(seats, perm, courtCount);
+            long score = ScorePermutation(seats, perm, courtCount, roundIndex, useCyclicShiftTiebreak);
             if (score < bestScore)
             {
                 bestScore = score;
@@ -143,13 +167,48 @@ public static class GreedyScheduler
             }
         } while (NextPermutation(perm));
 
-        return bestPerm;
+        for (int i = 0; i < matches.Count; i++)
+        {
+            matches[i].CourtNumber = bestPerm[i] + 1;
+        }
+    }
+
+    /// <summary>
+    /// Mutates partner, opponent, and court counters to reflect a completed round.
+    /// </summary>
+    internal static void UpdateCounters(
+        List<Match> matches,
+        Dictionary<string, int> partnerCount,
+        Dictionary<string, int> opponentCount,
+        Dictionary<int, int[]> courtCount)
+    {
+        foreach (var m in matches)
+        {
+            var pk1 = PairKey(m.Team1Player1Id, m.Team1Player2Id);
+            partnerCount[pk1] = partnerCount.GetValueOrDefault(pk1) + 1;
+            var pk2 = PairKey(m.Team2Player1Id, m.Team2Player2Id);
+            partnerCount[pk2] = partnerCount.GetValueOrDefault(pk2) + 1;
+
+            foreach (var x in new[] { m.Team1Player1Id, m.Team1Player2Id })
+                foreach (var y in new[] { m.Team2Player1Id, m.Team2Player2Id })
+                {
+                    var ok = PairKey(x, y);
+                    opponentCount[ok] = opponentCount.GetValueOrDefault(ok) + 1;
+                }
+
+            int courtIdx = m.CourtNumber - 1;
+            foreach (var pid in new[] { m.Team1Player1Id, m.Team1Player2Id, m.Team2Player1Id, m.Team2Player2Id })
+                if (courtCount.ContainsKey(pid) && courtIdx < courtCount[pid].Length)
+                    courtCount[pid][courtIdx]++;
+        }
     }
 
     private static long ScorePermutation(
         List<(int a, int b, int c, int d)> seats,
         int[] perm,
-        Dictionary<int, int[]> courtCount)
+        Dictionary<int, int[]> courtCount,
+        int roundIndex,
+        bool useCyclicShiftTiebreak)
     {
         long maxSpread = 0;
         long sumSpread = 0;
@@ -174,8 +233,23 @@ public static class GreedyScheduler
             }
         }
 
-        // Primary: minimize the worst player's spread. Secondary: minimize total.
-        return maxSpread * 100_000L + sumSpread;
+        long shiftDistance = 0;
+        if (useCyclicShiftTiebreak)
+        {
+            // Tiebreak: prefer perms close to the cyclic shift (i+r) mod c. For symmetric matchups
+            // (e.g. Wh(8) where one player sits in match 0 every round), this rotates which court
+            // match 0 plays on each round so the always-in-match-0 player cycles through courts.
+            long courts = perm.Length;
+            for (int i = 0; i < perm.Length; i++)
+            {
+                int preferred = (int)(((i + roundIndex) % courts + courts) % courts);
+                int diff = Math.Abs(perm[i] - preferred);
+                if (diff > courts / 2) diff = (int)courts - diff;
+                shiftDistance += diff;
+            }
+        }
+
+        return maxSpread * 1_000_000L + sumSpread * 1_000L + shiftDistance;
     }
 
     private static bool NextPermutation(int[] arr)
@@ -190,29 +264,5 @@ public static class GreedyScheduler
         return true;
     }
 
-    private static void UpdateCounters(
-        List<Match> matches,
-        Dictionary<string, int> partnerCount,
-        Dictionary<string, int> opponentCount,
-        Dictionary<int, int[]> courtCount)
-    {
-        foreach (var m in matches)
-        {
-            partnerCount[PairKey(m.Team1Player1Id, m.Team1Player2Id)] =
-                partnerCount.GetValueOrDefault(PairKey(m.Team1Player1Id, m.Team1Player2Id)) + 1;
-            partnerCount[PairKey(m.Team2Player1Id, m.Team2Player2Id)] =
-                partnerCount.GetValueOrDefault(PairKey(m.Team2Player1Id, m.Team2Player2Id)) + 1;
-
-            foreach (var x in new[] { m.Team1Player1Id, m.Team1Player2Id })
-                foreach (var y in new[] { m.Team2Player1Id, m.Team2Player2Id })
-                    opponentCount[PairKey(x, y)] = opponentCount.GetValueOrDefault(PairKey(x, y)) + 1;
-
-            int courtIdx = m.CourtNumber - 1;
-            foreach (var pid in new[] { m.Team1Player1Id, m.Team1Player2Id, m.Team2Player1Id, m.Team2Player2Id })
-                if (courtCount.ContainsKey(pid) && courtIdx < courtCount[pid].Length)
-                    courtCount[pid][courtIdx]++;
-        }
-    }
-
-    private static string PairKey(int a, int b) => a < b ? $"{a}-{b}" : $"{b}-{a}";
+    internal static string PairKey(int a, int b) => a < b ? $"{a}-{b}" : $"{b}-{a}";
 }
