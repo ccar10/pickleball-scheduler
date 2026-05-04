@@ -16,10 +16,33 @@ else
         <a href="/event/@evt.Id/setup" class="btn btn-outline-secondary btn-sm me-2">Edit Setup</a>
         <a href="/event/@evt.Id/stats" class="btn btn-outline-secondary btn-sm me-2">View Stats</a>
         <button class="btn btn-outline-primary btn-sm me-2" @onclick="Print">Print Schedule</button>
-        <button class="btn btn-outline-warning btn-sm" @onclick="Regenerate" disabled="@isRegenerating">
+        <button class="btn btn-outline-warning btn-sm" @onclick="@(() => showRegenerateConfirm = true)" disabled="@isRegenerating">
             @(isRegenerating ? "Regenerating..." : "Regenerate")
         </button>
     </div>
+
+    @if (showRegenerateConfirm)
+    {
+        <div class="modal d-block no-print" tabindex="-1" role="dialog" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Regenerate schedule?</h5>
+                        <button type="button" class="btn-close" aria-label="Close"
+                                @onclick="@(() => showRegenerateConfirm = false)"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-0">This will replace the current schedule with a new one. The existing rounds and matches will be deleted.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary"
+                                @onclick="@(() => showRegenerateConfirm = false)">Cancel</button>
+                        <button type="button" class="btn btn-warning" @onclick="ConfirmRegenerate">Yes, regenerate</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 
     @if (evt.Rounds.Count == 0)
     {
@@ -84,6 +107,7 @@ else
     private Event? evt;
     private List<string> courtNames = new();
     private bool isRegenerating;
+    private bool showRegenerateConfirm;
 
     protected override async Task OnInitializedAsync()
     {
@@ -97,6 +121,12 @@ else
     private async Task Print()
     {
         await JS.InvokeVoidAsync("window.print");
+    }
+
+    private async Task ConfirmRegenerate()
+    {
+        showRegenerateConfirm = false;
+        await Regenerate();
     }
 
     private async Task Regenerate()
