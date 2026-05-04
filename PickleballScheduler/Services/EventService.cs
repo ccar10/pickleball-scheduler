@@ -84,10 +84,6 @@ public class EventService
             _db.Rounds.Add(round);
         }
 
-        evt.Hr1Violations = result.Hr1Violations;
-        evt.Hr2Violations = result.Hr2Violations;
-        evt.RepeatSuggestion = result.RepeatSuggestion;
-
         await _db.SaveChangesAsync();
     }
 

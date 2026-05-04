@@ -10,10 +10,9 @@ public class ScheduleGenerator
     public ScheduleResult Generate(List<Player> players, int numberOfCourts, int numberOfRounds)
     {
         if (CanonicalSchedules.IsCanonical(players.Count, numberOfCourts))
-            return new ScheduleResult(GenerateFromTable(players, numberOfCourts, numberOfRounds), 0, 0, null);
+            return new ScheduleResult(GenerateFromTable(players, numberOfCourts, numberOfRounds));
 
-        return new ScheduleResult(
-            GreedyScheduler.Generate(players, numberOfCourts, numberOfRounds), 0, 0, null);
+        return new ScheduleResult(GreedyScheduler.Generate(players, numberOfCourts, numberOfRounds));
     }
 
     // Canonical tables are 30 rounds long; rounds > RoundCount is out-of-scope per spec
@@ -330,57 +329,12 @@ public class ScheduleGenerator
         => a < b ? $"{a}-{b}" : $"{b}-{a}";
 
     /// <summary>
-    /// Try near-neighbor configurations (player count and round count adjusted by ±1, ±2, ±3)
-    /// and return a human-readable suggestion for the smallest change that yields zero violations,
-    /// or null if no near-neighbor works.
+    /// Stub — violation fields were removed from ScheduleResult in Task 5.
+    /// This method body will be deleted in Task 7 along with the rest of the dead violation code.
     /// </summary>
     public static string? TrySuggestZeroViolationConfig(
         List<Player> players, int courts, int rounds)
     {
-        var generator = new ScheduleGenerator();
-
-        // If the current config is already zero-violation, no suggestion is needed.
-        try
-        {
-            var currentResult = generator.Generate(players, courts, rounds);
-            if (currentResult.Hr1Violations == 0 && currentResult.Hr2Violations == 0)
-            {
-                return null;
-            }
-        }
-        catch { /* if current config throws, fall through to neighbor search */ }
-
-        // Search neighbors ordered by total |delta|, smallest first.
-        var deltas = new List<(int dPlayers, int dRounds)>();
-        for (int dp = -3; dp <= 3; dp++)
-            for (int dr = -3; dr <= 3; dr++)
-            {
-                if (dp == 0 && dr == 0) continue;
-                deltas.Add((dp, dr));
-            }
-        deltas.Sort((a, b) => (Math.Abs(a.dPlayers) + Math.Abs(a.dRounds))
-                             .CompareTo(Math.Abs(b.dPlayers) + Math.Abs(b.dRounds)));
-
-        foreach (var (dp, dr) in deltas)
-        {
-            int candidatePlayers = players.Count + dp;
-            int candidateRounds = rounds + dr;
-            if (candidatePlayers < 4 || candidateRounds < 1) continue;
-
-            var candidatePlayerList = Enumerable.Range(1, candidatePlayers)
-                .Select(id => new Player { Id = id, Name = $"P{id}" })
-                .ToList();
-
-            try
-            {
-                var result = generator.Generate(candidatePlayerList, courts, candidateRounds);
-                if (result.Hr1Violations == 0 && result.Hr2Violations == 0)
-                {
-                    return $"{candidatePlayers} players and {candidateRounds} rounds";
-                }
-            }
-            catch { /* skip infeasible configs */ }
-        }
         return null;
     }
 
