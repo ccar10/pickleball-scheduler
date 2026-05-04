@@ -19,24 +19,28 @@ public class CanonicalScheduleGenerator
 
         // Schedule[round] = matches in that round; each match is (a, b, c, d) role indices and a court 0..courts-1.
         var schedule = RandomInitialSchedule(n, courts, rng);
+        long currentCost = ComputeCost(schedule, n, courts);
         var bestSchedule = Clone(schedule);
-        long bestCost = ComputeCost(bestSchedule, n, courts);
+        long bestCost = currentCost;
 
         double temperature = 100.0;
         const double cooling = 0.9999;
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var budget = TimeSpan.FromSeconds(60);
 
+        // Note: bestCost == 0 is unreachable for these sizes (non-integer ideal partner counts
+        // mean partnerSpread >= 1 always), so the budget governs termination in practice.
         while (sw.Elapsed < budget && bestCost > 0)
         {
             var candidate = Clone(schedule);
             ApplyLocalMove(candidate, n, courts, rng);
             long candidateCost = ComputeCost(candidate, n, courts);
-            long delta = candidateCost - bestCost;
+            long delta = candidateCost - currentCost;
 
             if (delta < 0 || rng.NextDouble() < Math.Exp(-delta / Math.Max(temperature, 0.01)))
             {
                 schedule = candidate;
+                currentCost = candidateCost;
                 if (candidateCost < bestCost)
                 {
                     bestCost = candidateCost;
@@ -147,7 +151,7 @@ public class CanonicalScheduleGenerator
     private static long ComputeCost(List<List<BakedMatchRow>> s, int n, int courts)
     {
         // Validate: every player appears exactly once per round, every court 0..courts-1 used once per round.
-        // Invalid candidates get cost int.MaxValue / 4 to push the search away.
+        // Invalid candidates get cost long.MaxValue / 4 to push the search away.
         foreach (var round in s)
         {
             var seenPlayers = new HashSet<int>();
