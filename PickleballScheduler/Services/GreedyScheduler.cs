@@ -54,15 +54,13 @@ public static class GreedyScheduler
         int matchesPerRound)
     {
         var used = new HashSet<int>();
-        var matches = new List<Match>(matchesPerRound);
-        var unusedCourts = Enumerable.Range(0, matchesPerRound).ToList();
+        var seats = new List<(int a, int b, int c, int d)>(matchesPerRound);
 
-        while (unusedCourts.Count > 0)
+        // Phase 1: pick partners and opponents for each match (no court yet).
+        for (int slot = 0; slot < matchesPerRound; slot++)
         {
-            // Pick player A: lowest-id unused active player.
             var a = active.First(p => !used.Contains(p.Id));
 
-            // Pick partner B: minimize prior partner count with A; tiebreak by opp count, then id.
             var b = active
                 .Where(p => p.Id != a.Id && !used.Contains(p.Id))
                 .OrderBy(p => partnerCount.GetValueOrDefault(PairKey(a.Id, p.Id)))
@@ -70,7 +68,6 @@ public static class GreedyScheduler
                 .ThenBy(p => p.Id)
                 .First();
 
-            // Pick opponent pair (C, D): minimize sum of priorOpponentCount across the 4 cross-pairs.
             var remaining = active.Where(p => p.Id != a.Id && p.Id != b.Id && !used.Contains(p.Id)).ToList();
             (Player c, Player d) bestPair = default;
             long bestScore = long.MaxValue;
@@ -97,34 +94,100 @@ public static class GreedyScheduler
                 throw new InvalidOperationException(
                     $"No opponent pair found; active={active.Count}, used={used.Count}");
 
-            // Pick court: minimize sum of prior courtCount across the 4 players.
-            int bestCourt = unusedCourts[0];
-            int bestCourtScore = int.MaxValue;
-            foreach (var courtIdx in unusedCourts)
-            {
-                int score = 0;
-                foreach (var pid in new[] { a.Id, b.Id, bestPair.c.Id, bestPair.d.Id })
-                    score += courtCount[pid][courtIdx];
-                if (score < bestCourtScore)
-                {
-                    bestCourtScore = score;
-                    bestCourt = courtIdx;
-                }
-            }
-
-            matches.Add(new Match
-            {
-                Team1Player1Id = a.Id,
-                Team1Player2Id = b.Id,
-                Team2Player1Id = bestPair.c.Id,
-                Team2Player2Id = bestPair.d.Id,
-                CourtNumber = bestCourt + 1,
-            });
-            used.Add(a.Id); used.Add(b.Id); used.Add(bestPair.c.Id); used.Add(bestPair.d.Id);
-            unusedCourts.Remove(bestCourt);
+            seats.Add((a.Id, b.Id, bestPair.c.Id, bestPair.d.Id));
+            used.Add(a.Id);
+            used.Add(b.Id);
+            used.Add(bestPair.c.Id);
+            used.Add(bestPair.d.Id);
         }
 
+        // Phase 2: assign court labels by trying all matchesPerRound! permutations and picking the
+        // one that minimizes the worst player's post-round court spread (sum of spreads as tiebreak).
+        // matchesPerRound <= 6 in practice so the factorial is small (max 720).
+        int[] bestAssignment = AssignCourts(seats, courtCount, matchesPerRound);
+
+        var matches = new List<Match>(matchesPerRound);
+        for (int i = 0; i < seats.Count; i++)
+        {
+            var s = seats[i];
+            matches.Add(new Match
+            {
+                Team1Player1Id = s.a,
+                Team1Player2Id = s.b,
+                Team2Player1Id = s.c,
+                Team2Player2Id = s.d,
+                CourtNumber = bestAssignment[i] + 1,
+            });
+        }
         return matches;
+    }
+
+    private static int[] AssignCourts(
+        List<(int a, int b, int c, int d)> seats,
+        Dictionary<int, int[]> courtCount,
+        int courts)
+    {
+        if (seats.Count <= 1) return new[] { 0 };
+
+        var perm = Enumerable.Range(0, seats.Count).ToArray();
+        var bestPerm = (int[])perm.Clone();
+        long bestScore = long.MaxValue;
+
+        do
+        {
+            long score = ScorePermutation(seats, perm, courtCount);
+            if (score < bestScore)
+            {
+                bestScore = score;
+                bestPerm = (int[])perm.Clone();
+            }
+        } while (NextPermutation(perm));
+
+        return bestPerm;
+    }
+
+    private static long ScorePermutation(
+        List<(int a, int b, int c, int d)> seats,
+        int[] perm,
+        Dictionary<int, int[]> courtCount)
+    {
+        long maxSpread = 0;
+        long sumSpread = 0;
+
+        for (int i = 0; i < seats.Count; i++)
+        {
+            var s = seats[i];
+            int courtIdx = perm[i];
+            foreach (var pid in new[] { s.a, s.b, s.c, s.d })
+            {
+                if (!courtCount.TryGetValue(pid, out var counts) || courtIdx >= counts.Length) continue;
+                int max = 0, min = int.MaxValue;
+                for (int ci = 0; ci < counts.Length; ci++)
+                {
+                    int v = counts[ci] + (ci == courtIdx ? 1 : 0);
+                    if (v > max) max = v;
+                    if (v < min) min = v;
+                }
+                int spread = max - min;
+                sumSpread += spread;
+                if (spread > maxSpread) maxSpread = spread;
+            }
+        }
+
+        // Primary: minimize the worst player's spread. Secondary: minimize total.
+        return maxSpread * 100_000L + sumSpread;
+    }
+
+    private static bool NextPermutation(int[] arr)
+    {
+        int i = arr.Length - 2;
+        while (i >= 0 && arr[i] >= arr[i + 1]) i--;
+        if (i < 0) return false;
+        int j = arr.Length - 1;
+        while (arr[j] <= arr[i]) j--;
+        (arr[i], arr[j]) = (arr[j], arr[i]);
+        Array.Reverse(arr, i + 1, arr.Length - 1 - i);
+        return true;
     }
 
     private static void UpdateCounters(

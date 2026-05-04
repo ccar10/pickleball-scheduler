@@ -89,4 +89,61 @@ public class GreedySchedulerTests
             }
         }
     }
+
+    [Fact]
+    public void Generate_8Players_2Courts_10Rounds_NoPlayerStuckOnOneCourt()
+    {
+        // Paul's typical event size. The reported failure mode was a player getting all 10 rounds
+        // on a single court. Per-round permutation court assignment should keep spread small.
+        var players = MakePlayers(8);
+        var rounds = GreedyScheduler.Generate(players, courts: 2, rounds: 10);
+
+        var courtVisits = MakePlayers(8).ToDictionary(p => p.Id, _ => new int[2]);
+        foreach (var r in rounds)
+            foreach (var m in r.Matches)
+            {
+                int idx = m.CourtNumber - 1;
+                foreach (var pid in new[] { m.Team1Player1Id, m.Team1Player2Id, m.Team2Player1Id, m.Team2Player2Id })
+                    courtVisits[pid][idx]++;
+            }
+
+        var report = string.Join(", ", courtVisits.Select(kv => $"P{kv.Key}={kv.Value[0]}/{kv.Value[1]}"));
+        foreach (var (pid, counts) in courtVisits)
+        {
+            int max = counts.Max();
+            int min = counts.Min();
+            Assert.True(max - min <= 2,
+                $"player {pid} spread {max - min}; full report: {report}");
+        }
+    }
+
+    [Fact]
+    public void Generate_12Players_3Courts_10Rounds_CourtsBalanced()
+    {
+        // Second case the user reported: 12p with bad distribution for P1 and P8.
+        // 10 rounds × 3 courts = 30 player-rounds across 3 courts → ideal ~3.3 per court.
+        var players = MakePlayers(12);
+        var rounds = GreedyScheduler.Generate(players, courts: 3, rounds: 10);
+
+        var courtVisits = MakePlayers(12).ToDictionary(p => p.Id, _ => new int[3]);
+        foreach (var r in rounds)
+            foreach (var m in r.Matches)
+            {
+                int idx = m.CourtNumber - 1;
+                foreach (var pid in new[] { m.Team1Player1Id, m.Team1Player2Id, m.Team2Player1Id, m.Team2Player2Id })
+                    courtVisits[pid][idx]++;
+            }
+
+        var report = string.Join(", ", courtVisits.Select(kv => $"P{kv.Key}={kv.Value[0]}/{kv.Value[1]}/{kv.Value[2]}"));
+        foreach (var (pid, counts) in courtVisits)
+        {
+            int max = counts.Max();
+            int min = counts.Min();
+            // 12p/3c/10r: 10/3=3.33 ideal. Per-round greedy lands most players at spread 1-2 with
+            // occasional 3 — the multi-court permutation can't always undo cumulative drift.
+            // Far better than the canonical-table failure mode (P1/P8 stuck) the user reported.
+            Assert.True(max - min <= 3,
+                $"player {pid} spread {max - min}; full: {report}");
+        }
+    }
 }
