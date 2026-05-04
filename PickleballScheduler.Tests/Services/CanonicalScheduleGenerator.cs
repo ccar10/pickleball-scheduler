@@ -23,10 +23,14 @@ public class CanonicalScheduleGenerator
         var bestSchedule = Clone(schedule);
         long bestCost = currentCost;
 
-        double temperature = 100.0;
-        const double cooling = 0.9999;
+        // Tuning notes (from Task 9 generation runs): partner-spread weight is 1e6 per unit, so the
+        // initial temperature must be at least ~1e7 for SA to accept uphill moves on that component.
+        // Without this, SA degenerates into greedy hill-descent and gets stuck at suboptimal spreads.
+        // Budget of 5 minutes per size is needed for n>=16; n=8 converges in seconds.
+        double temperature = 1_000_000_000.0;
+        const double cooling = 0.999995;
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var budget = TimeSpan.FromSeconds(60);
+        var budget = TimeSpan.FromMinutes(5);
 
         // Note: bestCost == 0 is unreachable for these sizes (non-integer ideal partner counts
         // mean partnerSpread >= 1 always), so the budget governs termination in practice.
