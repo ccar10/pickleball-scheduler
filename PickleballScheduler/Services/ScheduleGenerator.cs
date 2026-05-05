@@ -18,6 +18,7 @@ public class ScheduleGenerator
         var opponentCount = new Dictionary<string, int>();
         var courtCount = players.ToDictionary(p => p.Id, _ => new int[matchesPerRound]);
         var byeCount = players.ToDictionary(p => p.Id, _ => 0);
+        var lastByeRound = new Dictionary<int, int>();
 
         bool useWhist = WhistMatchups.IsSupportedSize(players.Count)
                         && numberOfCourts >= players.Count / 4;
@@ -37,7 +38,7 @@ public class ScheduleGenerator
             }
             else
             {
-                var active = GreedyScheduler.SelectActive(players, matchesPerRound * 4, byeCount);
+                var active = GreedyScheduler.SelectActive(players, matchesPerRound * 4, byeCount, lastByeRound, r);
                 byes = players.Where(p => !active.Contains(p)).ToList();
                 matches = GreedyScheduler.BuildOneRound(active, partnerCount, opponentCount, matchesPerRound);
             }
@@ -46,7 +47,7 @@ public class ScheduleGenerator
             GreedyScheduler.AssignCourtsToRound(matches, courtCount, matchesPerRound, r,
                 useCyclicShiftTiebreak: whistRound);
             GreedyScheduler.UpdateCounters(matches, partnerCount, opponentCount, courtCount);
-            foreach (var b in byes) byeCount[b.Id]++;
+            foreach (var b in byes) { byeCount[b.Id]++; lastByeRound[b.Id] = r; }
 
             output.Add(new Round
             {

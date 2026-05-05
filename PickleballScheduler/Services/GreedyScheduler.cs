@@ -20,12 +20,13 @@ public static class GreedyScheduler
         var opponentCount = new Dictionary<string, int>();
         var courtCount = players.ToDictionary(p => p.Id, _ => new int[matchesPerRound]);
         var byeCount = players.ToDictionary(p => p.Id, _ => 0);
+        var lastByeRound = new Dictionary<int, int>();
 
         var output = new List<Round>(rounds);
 
         for (int r = 0; r < rounds; r++)
         {
-            var active = SelectActive(players, matchesPerRound * 4, byeCount);
+            var active = SelectActive(players, matchesPerRound * 4, byeCount, lastByeRound, r);
             var byes = players.Where(p => !active.Contains(p)).ToList();
 
             var matches = BuildOneRound(active, partnerCount, opponentCount, matchesPerRound);
@@ -33,7 +34,7 @@ public static class GreedyScheduler
             // (designed for symmetric Whist matchups) tends to make worse choices here, so disable it.
             AssignCourtsToRound(matches, courtCount, matchesPerRound, r, useCyclicShiftTiebreak: false);
             UpdateCounters(matches, partnerCount, opponentCount, courtCount);
-            foreach (var b in byes) byeCount[b.Id]++;
+            foreach (var b in byes) { byeCount[b.Id]++; lastByeRound[b.Id] = r; }
 
             output.Add(new Round
             {
@@ -46,16 +47,48 @@ public static class GreedyScheduler
     }
 
     /// <summary>
-    /// Bye rotation: among the requested player count, prefer those with the most accumulated byes.
+    /// Bye rotation: pick byes by lowest total byes, then longest wait since last bye (max-spread).
+    /// A rotational tiebreak (id*stride + round) prevents the all-tied case (e.g. round 0) from
+    /// falling into a strict descending-ID pattern.
     /// </summary>
-    internal static List<Player> SelectActive(List<Player> players, int needed, Dictionary<int, int> byeCount)
+    internal static List<Player> SelectActive(
+        List<Player> players,
+        int needed,
+        Dictionary<int, int> byeCount,
+        Dictionary<int, int> lastByeRound,
+        int currentRound)
     {
         if (needed >= players.Count) return new List<Player>(players);
-        return players
-            .OrderByDescending(p => byeCount[p.Id])
+        int numByes = players.Count - needed;
+        int n = players.Count;
+        int stride = StrideFor(n);
+
+        var byeIds = players
+            .OrderBy(p => byeCount[p.Id])
+            .ThenBy(p => lastByeRound.GetValueOrDefault(p.Id, int.MinValue))
+            .ThenBy(p => RotatedKey(p.Id, currentRound, stride, n))
             .ThenBy(p => p.Id)
-            .Take(needed)
-            .ToList();
+            .Take(numByes)
+            .Select(p => p.Id)
+            .ToHashSet();
+
+        return players.Where(p => !byeIds.Contains(p.Id)).ToList();
+    }
+
+    private static int RotatedKey(int playerId, int round, int stride, int n)
+        => (int)((((long)playerId * stride + round) % n + n) % n);
+
+    private static int StrideFor(int n)
+    {
+        for (int s = Math.Max(2, n / 2); s >= 2; s--)
+            if (Gcd(s, n) == 1) return s;
+        return 1;
+    }
+
+    private static int Gcd(int a, int b)
+    {
+        while (b != 0) (a, b) = (b, a % b);
+        return Math.Abs(a);
     }
 
     /// <summary>

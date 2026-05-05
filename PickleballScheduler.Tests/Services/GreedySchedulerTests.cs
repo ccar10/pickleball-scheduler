@@ -30,6 +30,24 @@ public class GreedySchedulerTests
     }
 
     [Fact]
+    public void Generate_9Players_2Courts_4Rounds_ByeOrderIsNotStrictlyDescending()
+    {
+        // Regression: previously byes went 9,8,7,6,... — a mechanical descending pattern.
+        // Max-spread + rotational tiebreak should give a non-monotonic order while still
+        // covering distinct players each round (since byeCount stays balanced).
+        var players = MakePlayers(9);
+        var rounds = GreedyScheduler.Generate(players, courts: 2, rounds: 4);
+
+        var byeIds = rounds.Select(r => r.Byes.Single().PlayerId).ToList();
+        Assert.Equal(4, byeIds.Distinct().Count());
+
+        bool strictlyDescending = byeIds
+            .Zip(byeIds.Skip(1), (a, b) => b == a - 1)
+            .All(x => x);
+        Assert.False(strictlyDescending, $"bye order is still strictly descending: {string.Join(",", byeIds)}");
+    }
+
+    [Fact]
     public void Generate_7Players_1Court_7Rounds_RotatesByesEvenly()
     {
         var players = MakePlayers(7);
