@@ -102,3 +102,41 @@ public class WhistValidatorTests
             $"n={n} shipped base round failed validation: {reason}");
     }
 }
+
+public class CoverageCalculatorTests
+{
+    [Fact]
+    public void MaxCoverageRound_ShippedWh16_IsTwelve()
+    {
+        // P0 (inf) takes 13 rounds (round index 12) to meet all 15 others under (inf,0,1,2).
+        var c = TestData.ShippedBaseRound(16);
+        var result = CoverageCalculator.Compute(c);
+        Assert.Equal(12, result.MaxCoverageRound);  // 0-indexed round index
+    }
+
+    [Fact]
+    public void MaxCoverageRound_ShippedWh8_IsThree()
+    {
+        // P0 takes 4 rounds (round index 3) to meet all 7 others under (inf,0,1,3).
+        var c = TestData.ShippedBaseRound(8);
+        var result = CoverageCalculator.Compute(c);
+        Assert.Equal(3, result.MaxCoverageRound);
+    }
+
+    [Fact]
+    public void PerPlayerCoverage_ShippedWh16_InfPlayerIsBottleneck()
+    {
+        var c = TestData.ShippedBaseRound(16);
+        var result = CoverageCalculator.Compute(c);
+        // P0 (player ID 0 in our indexing) is the inf player and has the worst coverage.
+        Assert.Equal(12, result.CoverageRoundByPlayer[0]);
+        // P0 is at the maximum — confirmed at the global max.
+        Assert.Equal(result.MaxCoverageRound, result.CoverageRoundByPlayer[0]);
+        // Most finite players complete coverage earlier; at least half should finish before round 12.
+        int countBetter = 0;
+        for (int p = 1; p < 16; p++)
+            if (result.CoverageRoundByPlayer[p] < 12) countBetter++;
+        Assert.True(countBetter >= 8,
+            $"Expected at least 8 finite players with coverage < 12, got {countBetter}");
+    }
+}
