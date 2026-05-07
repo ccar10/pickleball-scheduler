@@ -20,7 +20,7 @@ internal static class TestData
             (BaseRoundCandidate.Inf, 0, 1, 2),
             (3, 6, 9, 11),
             (4, 13, 8, 12),
-            (5, 10, 14, 7)),
+            (5, 10, 7, 14)),
         20 => BaseRoundCandidate.FromTuples(20,
             (BaseRoundCandidate.Inf, 0, 1, 2),
             (3, 5, 9, 15),

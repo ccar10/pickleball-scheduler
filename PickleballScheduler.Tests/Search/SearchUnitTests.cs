@@ -103,6 +103,72 @@ public class WhistValidatorTests
     }
 }
 
+public class BaseRoundEnumeratorTests
+{
+    [Fact]
+    public void Enumerate_n8_ProducesAtLeastOneValidCandidate()
+    {
+        var validCount = 0;
+        foreach (var candidate in BaseRoundEnumerator.Enumerate(8))
+        {
+            if (WhistValidator.IsValid(candidate, out _)) validCount++;
+        }
+        Assert.True(validCount > 0, "expected at least one valid Wh(8) candidate");
+    }
+
+    [Fact]
+    public void Enumerate_n8_AllRespectSymmetryBreaking()
+    {
+        foreach (var c in BaseRoundEnumerator.Enumerate(8))
+        {
+            var m0 = c.Matches[0];
+            Assert.Equal(BaseRoundCandidate.Inf, m0.Team1A);
+
+            // Match[0]'s inf-partner is the smallest finite role in match[0].
+            var m0Finites = new[] { m0.Team1B, m0.Team2A, m0.Team2B };
+            Assert.Equal(m0Finites.Min(), m0.Team1B);
+
+            // Non-inf matches: team1A < team1B, team2A < team2B, team1A < team2A.
+            for (int i = 1; i < c.Matches.Count; i++)
+            {
+                var m = c.Matches[i];
+                Assert.True(m.Team1A < m.Team1B);
+                Assert.True(m.Team2A < m.Team2B);
+                Assert.True(m.Team1A < m.Team2A);
+            }
+
+            // Non-inf matches sorted by Team1A ascending.
+            for (int i = 2; i < c.Matches.Count; i++)
+                Assert.True(c.Matches[i - 1].Team1A < c.Matches[i].Team1A);
+        }
+    }
+
+    [Fact]
+    public void Enumerate_n16_IncludesShippedBaseRound()
+    {
+        var shipped = TestData.ShippedBaseRound(16);
+        bool found = false;
+        foreach (var candidate in BaseRoundEnumerator.Enumerate(16))
+        {
+            if (CandidatesEqual(candidate, shipped)) { found = true; break; }
+        }
+        Assert.True(found, "shipped Wh(16) should appear in enumerated candidates");
+    }
+
+    private static bool CandidatesEqual(BaseRoundCandidate a, BaseRoundCandidate b)
+    {
+        if (a.PlayerCount != b.PlayerCount || a.Matches.Count != b.Matches.Count) return false;
+        for (int i = 0; i < a.Matches.Count; i++)
+        {
+            var ma = a.Matches[i];
+            var mb = b.Matches[i];
+            if (ma.Team1A != mb.Team1A || ma.Team1B != mb.Team1B
+             || ma.Team2A != mb.Team2A || ma.Team2B != mb.Team2B) return false;
+        }
+        return true;
+    }
+}
+
 public class CoverageCalculatorTests
 {
     [Fact]
