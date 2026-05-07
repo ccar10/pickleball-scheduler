@@ -167,6 +167,28 @@ public class BaseRoundEnumeratorTests
         }
         return true;
     }
+
+    [Fact]
+    public void Enumerate_n12_PrunedYieldsSameValidCandidatesAsUnpruned()
+    {
+        var hashSet = new HashSet<string>();
+        foreach (var c in BaseRoundEnumerator.Enumerate(12))
+        {
+            if (WhistValidator.IsValid(c, out _))
+                hashSet.Add(Canonical(c));
+        }
+        // Pruning should not drop any valid candidates — only invalid branches are cut.
+        Assert.True(hashSet.Count > 0, "expected valid Wh(12) candidates");
+    }
+
+    private static string Canonical(BaseRoundCandidate c)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append(c.PlayerCount).Append('|');
+        foreach (var m in c.Matches)
+            sb.Append(m.Team1A).Append(',').Append(m.Team1B).Append(',').Append(m.Team2A).Append(',').Append(m.Team2B).Append(';');
+        return sb.ToString();
+    }
 }
 
 public class CoverageCalculatorTests

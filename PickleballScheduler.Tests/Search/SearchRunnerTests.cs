@@ -34,6 +34,18 @@ public class SearchRunnerTests
         return $"[{c.PlayerCount}] = new[]\n{{\n{string.Join("\n", lines)}\n}},";
     }
 
+    [Fact]
+    public void FindBest_n16_WithPruning_StillFindsCoverageRound4()
+    {
+        // With difference-class pruning in BaseRoundEnumerator, the search should still find
+        // a Wh(16) base round with MaxCoverageRound == 4 (0-indexed). This is the best
+        // known result and the shipped value as of the 2026-05-07 redesign.
+        // Runtime is typically 10-30 seconds on developer hardware.
+        var best = SearchRunner.FindBest(16);
+        Assert.NotNull(best);
+        Assert.Equal(4, best!.MaxCoverageRound);
+    }
+
     [Theory(Skip = "Manual run: unskip to regenerate base rounds. Can take minutes for large n.")]
     [InlineData(12)]
     [InlineData(16)]
