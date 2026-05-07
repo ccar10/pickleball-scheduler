@@ -46,3 +46,59 @@ public class BaseRoundCandidateTests
     }
 }
 
+public class WhistValidatorTests
+{
+    [Fact]
+    public void IsValid_ExistingWh8_ReturnsTrue()
+    {
+        var c = BaseRoundCandidate.FromTuples(8,
+            (BaseRoundCandidate.Inf, 0, 1, 3),
+            (2, 6, 4, 5));
+        Assert.True(WhistValidator.IsValid(c, out _));
+    }
+
+    [Fact]
+    public void IsValid_ExistingWh16_ReturnsTrue()
+    {
+        var c = BaseRoundCandidate.FromTuples(16,
+            (BaseRoundCandidate.Inf, 0, 1, 2),
+            (3, 6, 9, 11),
+            (4, 13, 8, 12),
+            (5, 10, 14, 7));
+        Assert.True(WhistValidator.IsValid(c, out _));
+    }
+
+    [Fact]
+    public void IsValid_DuplicateRole_ReturnsFalse()
+    {
+        var c = BaseRoundCandidate.FromTuples(8,
+            (BaseRoundCandidate.Inf, 0, 1, 1),
+            (2, 6, 4, 5));
+        Assert.False(WhistValidator.IsValid(c, out var reason));
+        Assert.Contains("duplicate", reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void IsValid_PartnerDifferenceCollision_ReturnsFalse()
+    {
+        // Wh(8): partner classes must be {1,2,3}. Use (inf,0,1,2 | 3,4,5,6) where finite pairs
+        // (1,2) diff=1 and (5,6) diff=1 collide.
+        var c = BaseRoundCandidate.FromTuples(8,
+            (BaseRoundCandidate.Inf, 0, 1, 2),
+            (3, 4, 5, 6));
+        Assert.False(WhistValidator.IsValid(c, out _));
+    }
+
+    [Theory]
+    [InlineData(8)]
+    [InlineData(12)]
+    [InlineData(16)]
+    [InlineData(20)]
+    [InlineData(24)]
+    public void IsValid_AllShippedBaseRounds_ReturnTrue(int n)
+    {
+        var shipped = TestData.ShippedBaseRound(n);
+        Assert.True(WhistValidator.IsValid(shipped, out var reason),
+            $"n={n} shipped base round failed validation: {reason}");
+    }
+}
