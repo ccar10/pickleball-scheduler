@@ -57,36 +57,44 @@ internal static class WhistMatchups
         new Dictionary<int, BaseMatch[]>
         {
             // Wh(8): players inf, 0..6. Rotation mod 7.
+            // Already optimal — see docs/superpowers/specs/2026-05-07-whist-base-round-redesign.md.
+            // First-coverage round 3 (theoretical floor).
             [8] = new[]
             {
                 new BaseMatch("inf", "0", "1", "3"),
                 new BaseMatch("2",   "6", "4", "5"),
             },
             // Wh(12): players inf, 0..10. Rotation mod 11.
+            // Redesigned 2026-05-07 to reduce max first-coverage round from 7 to 6.
             [12] = new[]
             {
-                new BaseMatch("inf", "0",  "1", "3"),
-                new BaseMatch("2",   "9",  "6", "7"),
-                new BaseMatch("4",   "10", "5", "8"),
+                new BaseMatch("inf", "0",  "2",  "5"),
+                new BaseMatch("1",   "7",  "8",  "9"),
+                new BaseMatch("3",  "10",  "4",  "6"),
             },
             // Wh(16): players inf, 0..14. Rotation mod 15.
+            // Redesigned 2026-05-07 to reduce max first-coverage round from 12 to 4
+            // (8-round improvement; was the user's primary pain point).
             [16] = new[]
             {
-                new BaseMatch("inf", "0",  "1",  "2"),
-                new BaseMatch("3",   "6",  "9",  "11"),
-                new BaseMatch("4",   "13", "8",  "12"),
-                new BaseMatch("5",   "10", "14", "7"),
+                new BaseMatch("inf", "0",  "5",  "10"),
+                new BaseMatch("1",   "2",  "4",   "8"),
+                new BaseMatch("3",  "11", "12",  "14"),
+                new BaseMatch("6",   "9",  "7",  "13"),
             },
             // Wh(20): players inf, 0..18. Rotation mod 19.
+            // Redesigned 2026-05-07 to reduce max first-coverage round from 16 to 10.
             [20] = new[]
             {
-                new BaseMatch("inf", "0",  "1",  "2"),
-                new BaseMatch("3",   "5",  "9",  "15"),
-                new BaseMatch("4",   "14", "17", "12"),
-                new BaseMatch("6",   "18", "10", "13"),
-                new BaseMatch("7",   "11", "16", "8"),
+                new BaseMatch("inf", "0",  "8",  "11"),
+                new BaseMatch("1",   "3", "15",  "16"),
+                new BaseMatch("2",   "9",  "7",  "18"),
+                new BaseMatch("4",  "14", "13",  "17"),
+                new BaseMatch("5",  "10",  "6",  "12"),
             },
             // Wh(24): players inf, 0..22. Rotation mod 23.
+            // Redesign deferred — search did not complete in available budget.
+            // See docs/superpowers/specs/2026-05-07-whist-base-round-redesign.md.
             [24] = new[]
             {
                 new BaseMatch("inf", "0",  "1",  "2"),
