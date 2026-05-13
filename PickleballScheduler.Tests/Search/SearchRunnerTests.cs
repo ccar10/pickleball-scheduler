@@ -35,15 +35,16 @@ public class SearchRunnerTests
     }
 
     [Fact]
-    public void FindBest_n16_WithPruning_StillFindsCoverageRound4()
+    public void FindBest_n16_WithFoursomeUniqueness_FindsCoverageRound6()
     {
-        // With difference-class pruning in BaseRoundEnumerator, the search should still find
-        // a Wh(16) base round with MaxCoverageRound == 4 (0-indexed). This is the best
-        // known result and the shipped value as of the 2026-05-07 redesign.
-        // Runtime is typically 10-30 seconds on developer hardware.
+        // Wh(16) lives in mod-15 (composite), so unconstrained search finds candidates with
+        // MaxCoverageRound 4 — but those have a shift-5 self-symmetry that makes unordered
+        // foursomes repeat every 5 rounds. With the foursome-uniqueness constraint
+        // (FoursomeUniquenessChecker) in SearchRunner, the best achievable is 6.
+        // Runtime is typically under a second on developer hardware.
         var best = SearchRunner.FindBest(16);
         Assert.NotNull(best);
-        Assert.Equal(4, best!.MaxCoverageRound);
+        Assert.Equal(6, best!.MaxCoverageRound);
     }
 
     [Theory(Skip = "Manual run: unskip to regenerate base rounds. Can take minutes for large n.")]

@@ -73,24 +73,30 @@ internal static class WhistMatchups
                 new BaseMatch("3",  "10",  "4",  "6"),
             },
             // Wh(16): players inf, 0..14. Rotation mod 15.
-            // Redesigned 2026-05-07 to reduce max first-coverage round from 12 to 4
-            // (8-round improvement; was the user's primary pain point).
+            // Redesigned 2026-05-13: prior Wh(16) (max first-coverage 4) had a shift-5
+            // self-symmetry in its match-role multiset, causing unordered foursomes to repeat
+            // every 5 rounds. New base round adds the foursome-uniqueness constraint at the
+            // cost of raising max first-coverage from 4 to 6 (still 6 rounds better than the
+            // pre-2026-05-07 value of 12).
             [16] = new[]
             {
-                new BaseMatch("inf", "0",  "5",  "10"),
-                new BaseMatch("1",   "2",  "4",   "8"),
-                new BaseMatch("3",  "11", "12",  "14"),
-                new BaseMatch("6",   "9",  "7",  "13"),
+                new BaseMatch("inf", "0",  "2",   "8"),
+                new BaseMatch("1",   "4",  "5",  "10"),
+                new BaseMatch("3",  "14",  "6",  "13"),
+                new BaseMatch("7",   "9", "11",  "12"),
             },
             // Wh(20): players inf, 0..18. Rotation mod 19.
-            // Redesigned 2026-05-07 to reduce max first-coverage round from 16 to 10.
+            // Redesigned 2026-05-13: prior Wh(20) had two matches whose role sets differed by
+            // a fixed shift, causing foursomes from one match to reappear at a later round in
+            // another match. New base round enforces foursome uniqueness at the cost of
+            // raising max first-coverage from 10 to 11.
             [20] = new[]
             {
-                new BaseMatch("inf", "0",  "8",  "11"),
-                new BaseMatch("1",   "3", "15",  "16"),
-                new BaseMatch("2",   "9",  "7",  "18"),
-                new BaseMatch("4",  "14", "13",  "17"),
-                new BaseMatch("5",  "10",  "6",  "12"),
+                new BaseMatch("inf", "0",  "3",  "11"),
+                new BaseMatch("1",   "5", "12",  "18"),
+                new BaseMatch("2",   "7",  "8",  "17"),
+                new BaseMatch("4",   "6",  "9",  "16"),
+                new BaseMatch("10", "13", "14",  "15"),
             },
             // Wh(24): players inf, 0..22. Rotation mod 23.
             // Redesign deferred — search did not complete in available budget.

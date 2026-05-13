@@ -9,13 +9,14 @@ public class WhistMatchupsTests
     public static TheoryData<int, int> ExpectedCoverageRounds()
     {
         // 0-indexed worst-case round at which the slowest player has shared a court with
-        // everyone else. Captured from the base-round search on 2026-05-07. n=24 is the
-        // original value (search did not complete in budget).
+        // everyone else. n=16 and n=20 updated 2026-05-13 when the search added the
+        // foursome-uniqueness constraint (see WhistMatchups.cs comments). n=24 is the
+        // original pre-redesign value (search did not complete in budget).
         var d = new TheoryData<int, int>();
         d.Add(8, 3);
         d.Add(12, 6);
-        d.Add(16, 4);
-        d.Add(20, 10);
+        d.Add(16, 6);
+        d.Add(20, 11);
         d.Add(24, 20);
         return d;
     }
@@ -40,6 +41,19 @@ public class WhistMatchupsTests
         var candidate = ReconstructBaseRoundFromShipped(n);
         Assert.True(WhistValidator.IsValid(candidate, out var reason),
             $"Wh({n}) validator failed: {reason}");
+    }
+
+    [Theory]
+    [InlineData(8)]
+    [InlineData(12)]
+    [InlineData(16)]
+    [InlineData(20)]
+    [InlineData(24)]
+    public void ShippedBaseRound_HasNoRepeatedFoursomesAcrossRotation(int n)
+    {
+        var candidate = ReconstructBaseRoundFromShipped(n);
+        Assert.True(FoursomeUniquenessChecker.AllFoursomesUnique(candidate, out var reason),
+            $"Wh({n}) foursome uniqueness failed: {reason}");
     }
 
     /// <summary>
