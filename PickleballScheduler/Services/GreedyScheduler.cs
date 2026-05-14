@@ -94,6 +94,13 @@ public static class GreedyScheduler
     /// <summary>
     /// Picks matches for one round given the current partner/opponent counts. Returns matches with
     /// no CourtNumber set — the caller is responsible for calling <see cref="AssignCourtsToRound"/>.
+    ///
+    /// Branch-and-bound over all valid round assignments (anchor fixed to lowest remaining id for
+    /// symmetry breaking; (b,c,d) chosen from remaining; three team partitions tried per foursome).
+    /// Scored by ((sum of (2k+1) over the round's partner pairs) * 1000) + (sum of opponent
+    /// counts), where k = pre-existing partnerCount[pair]. The (2k+1) increment is the exact
+    /// delta in sum-of-squared-partner-counts from adding the pair, so the round-level score is
+    /// monotone in the global "squared partner count" objective — strongly discouraging triples.
     /// </summary>
     internal static List<Match> BuildOneRound(
         List<Player> active,
@@ -101,60 +108,250 @@ public static class GreedyScheduler
         Dictionary<string, int> opponentCount,
         int matchesPerRound)
     {
-        var used = new HashSet<int>();
-        var matches = new List<Match>(matchesPerRound);
+        if (matchesPerRound <= 0) return new List<Match>();
+        var remaining = active.OrderBy(p => p.Id).Select(p => p.Id).ToList();
+        if (remaining.Count < matchesPerRound * 4)
+            throw new InvalidOperationException(
+                $"BuildOneRound: active={remaining.Count} < matchesPerRound*4={matchesPerRound * 4}");
+
+        // Quick-greedy baseline. Identical to the historical greedy, preserving its match-slot
+        // rotation (which AssignCourtsToRound relies on for balancing per-player court visits).
+        var initial = QuickGreedy(remaining, partnerCount, opponentCount, matchesPerRound);
+
+        // Compute admissible lower bound on the round's partner cost: the sum of (2k+1) over the
+        // 2*matchesPerRound smallest partner counts among active pairs. Any valid matching's
+        // partner cost is >= this bound, so if greedy already hits it, greedy is partner-optimal
+        // and B&B can't improve. Skipping B&B in that case preserves the rotational structure of
+        // greedy's output, which AssignCourtsToRound depends on; running B&B unnecessarily can
+        // shuffle equivalently-scored arrangements into slot patterns that produce bad court
+        // spread for individual players.
+        long initialPartnerCost = ComputePartnerCost(initial, partnerCount);
+        long partnerLowerBound = ComputePartnerLowerBound(remaining, partnerCount, matchesPerRound);
+
+        var best = new SearchState
+        {
+            BestMatches = initial,
+            BestScore = ScoreMatches(initial, partnerCount, opponentCount),
+        };
+
+        if (initialPartnerCost > partnerLowerBound)
+        {
+            var current = new List<(int, int, int, int)>(matchesPerRound);
+            Search(remaining, current, 0, 0, matchesPerRound, partnerCount, opponentCount, best);
+        }
+
+        return best.BestMatches!.Select(m => new Match
+        {
+            Team1Player1Id = m.Item1,
+            Team1Player2Id = m.Item2,
+            Team2Player1Id = m.Item3,
+            Team2Player2Id = m.Item4,
+        }).ToList();
+    }
+
+    private sealed class SearchState
+    {
+        public List<(int, int, int, int)>? BestMatches;
+        public long BestScore = long.MaxValue;
+        public int NodesExplored;
+    }
+
+    private const long PartnerWeight = 1000L;
+    // Bounds B&B exploration in pathological configs (large active sets, no clear winner).
+    // For realistic inputs (active <= 12) the search finishes long before this. When the
+    // budget runs out, BuildOneRound returns the best leaf found so far — at worst the
+    // QuickGreedy seed, never an invalid matchup.
+    private const int MaxSearchNodes = 250_000;
+
+    private static long ScoreMatches(
+        List<(int, int, int, int)> matches,
+        Dictionary<string, int> partnerCount,
+        Dictionary<string, int> opponentCount)
+    {
+        long partnerCost = ComputePartnerCost(matches, partnerCount);
+        long oppCost = 0;
+        foreach (var m in matches)
+        {
+            oppCost += opponentCount.GetValueOrDefault(PairKey(m.Item1, m.Item3));
+            oppCost += opponentCount.GetValueOrDefault(PairKey(m.Item1, m.Item4));
+            oppCost += opponentCount.GetValueOrDefault(PairKey(m.Item2, m.Item3));
+            oppCost += opponentCount.GetValueOrDefault(PairKey(m.Item2, m.Item4));
+        }
+        return partnerCost * PartnerWeight + oppCost;
+    }
+
+    private static long ComputePartnerCost(
+        List<(int, int, int, int)> matches,
+        Dictionary<string, int> partnerCount)
+    {
+        long c = 0;
+        foreach (var m in matches)
+        {
+            c += 2L * partnerCount.GetValueOrDefault(PairKey(m.Item1, m.Item2)) + 1;
+            c += 2L * partnerCount.GetValueOrDefault(PairKey(m.Item3, m.Item4)) + 1;
+        }
+        return c;
+    }
+
+    private static long ComputePartnerLowerBound(
+        List<int> active,
+        Dictionary<string, int> partnerCount,
+        int matchesPerRound)
+    {
+        int needed = matchesPerRound * 2;
+        var counts = new List<int>(active.Count * (active.Count - 1) / 2);
+        for (int i = 0; i < active.Count; i++)
+            for (int j = i + 1; j < active.Count; j++)
+                counts.Add(partnerCount.GetValueOrDefault(PairKey(active[i], active[j])));
+        counts.Sort();
+
+        long lb = 0;
+        for (int k = 0; k < needed && k < counts.Count; k++)
+            lb += 2L * counts[k] + 1;
+        return lb;
+    }
+
+    private static List<(int, int, int, int)> QuickGreedy(
+        List<int> remaining,
+        Dictionary<string, int> partnerCount,
+        Dictionary<string, int> opponentCount,
+        int matchesPerRound)
+    {
+        var available = new List<int>(remaining);
+        var matches = new List<(int, int, int, int)>(matchesPerRound);
 
         for (int slot = 0; slot < matchesPerRound; slot++)
         {
-            var a = active.First(p => !used.Contains(p.Id));
+            int a = available[0];
 
-            var b = active
-                .Where(p => p.Id != a.Id && !used.Contains(p.Id))
-                .OrderBy(p => partnerCount.GetValueOrDefault(PairKey(a.Id, p.Id)))
-                .ThenBy(p => opponentCount.GetValueOrDefault(PairKey(a.Id, p.Id)))
-                .ThenBy(p => p.Id)
-                .First();
-
-            var remaining = active.Where(p => p.Id != a.Id && p.Id != b.Id && !used.Contains(p.Id)).ToList();
-            (Player c, Player d) bestPair = default;
+            // Partner b: min partner cost (with opp count as tiebreak).
+            int chosenB = -1;
             long bestScore = long.MaxValue;
-            foreach (var pc in remaining)
+            for (int i = 1; i < available.Count; i++)
             {
-                foreach (var pd in remaining)
+                int candidate = available[i];
+                int pc = partnerCount.GetValueOrDefault(PairKey(a, candidate));
+                int oc = opponentCount.GetValueOrDefault(PairKey(a, candidate));
+                long score = (long)pc * 1000 + oc;
+                if (score < bestScore) { bestScore = score; chosenB = candidate; }
+            }
+            int b = chosenB;
+
+            // Opponent pair (c, d): minimize combined opp cost; partner cost of (c,d) tiebreak.
+            int chosenC = -1, chosenD = -1;
+            long bestPairScore = long.MaxValue;
+            for (int i = 1; i < available.Count; i++)
+            {
+                if (available[i] == b) continue;
+                for (int j = i + 1; j < available.Count; j++)
                 {
-                    if (pd.Id <= pc.Id) continue;
-                    long score = 0;
-                    foreach (var x in new[] { a.Id, b.Id })
-                        foreach (var y in new[] { pc.Id, pd.Id })
-                            score += opponentCount.GetValueOrDefault(PairKey(x, y));
-                    score = score * 1000
-                          + partnerCount.GetValueOrDefault(PairKey(pc.Id, pd.Id));
-                    if (score < bestScore)
-                    {
-                        bestScore = score;
-                        bestPair = (pc, pd);
-                    }
+                    if (available[j] == b) continue;
+                    int c = available[i], d = available[j];
+                    long oppCost = opponentCount.GetValueOrDefault(PairKey(a, c))
+                                 + opponentCount.GetValueOrDefault(PairKey(a, d))
+                                 + opponentCount.GetValueOrDefault(PairKey(b, c))
+                                 + opponentCount.GetValueOrDefault(PairKey(b, d));
+                    int cdPart = partnerCount.GetValueOrDefault(PairKey(c, d));
+                    long score = oppCost * 1000 + cdPart;
+                    if (score < bestPairScore) { bestPairScore = score; chosenC = c; chosenD = d; }
                 }
             }
 
-            if (bestPair.c is null || bestPair.d is null)
-                throw new InvalidOperationException(
-                    $"No opponent pair found; active={active.Count}, used={used.Count}");
+            matches.Add((a, b, chosenC, chosenD));
+            available.Remove(a);
+            available.Remove(b);
+            available.Remove(chosenC);
+            available.Remove(chosenD);
+        }
+        return matches;
+    }
 
-            matches.Add(new Match
+    private static void Search(
+        List<int> remaining,
+        List<(int, int, int, int)> current,
+        long partnerCostSoFar,
+        long opponentCostSoFar,
+        int matchesPerRound,
+        Dictionary<string, int> partnerCount,
+        Dictionary<string, int> opponentCount,
+        SearchState best)
+    {
+        if (best.NodesExplored >= MaxSearchNodes) return;
+        best.NodesExplored++;
+
+        if (current.Count == matchesPerRound)
+        {
+            long score = partnerCostSoFar * PartnerWeight + opponentCostSoFar;
+            if (score < best.BestScore)
             {
-                Team1Player1Id = a.Id,
-                Team1Player2Id = b.Id,
-                Team2Player1Id = bestPair.c.Id,
-                Team2Player2Id = bestPair.d.Id,
-            });
-            used.Add(a.Id);
-            used.Add(b.Id);
-            used.Add(bestPair.c.Id);
-            used.Add(bestPair.d.Id);
+                best.BestScore = score;
+                best.BestMatches = new List<(int, int, int, int)>(current);
+            }
+            return;
         }
 
-        return matches;
+        // Symmetry breaking: anchor is the lowest remaining id.
+        int a = remaining[0];
+
+        for (int ib = 1; ib < remaining.Count; ib++)
+        for (int ic = ib + 1; ic < remaining.Count; ic++)
+        for (int id = ic + 1; id < remaining.Count; id++)
+        {
+            int b = remaining[ib];
+            int c = remaining[ic];
+            int d = remaining[id];
+
+            // Three team partitions of foursome {a,b,c,d}.
+            TryPartition(a, b, c, d, remaining, ib, ic, id, current,
+                         partnerCostSoFar, opponentCostSoFar,
+                         matchesPerRound, partnerCount, opponentCount, best);
+            TryPartition(a, c, b, d, remaining, ib, ic, id, current,
+                         partnerCostSoFar, opponentCostSoFar,
+                         matchesPerRound, partnerCount, opponentCount, best);
+            TryPartition(a, d, b, c, remaining, ib, ic, id, current,
+                         partnerCostSoFar, opponentCostSoFar,
+                         matchesPerRound, partnerCount, opponentCount, best);
+        }
+    }
+
+    private static void TryPartition(
+        int t1a, int t1b, int t2a, int t2b,
+        List<int> remaining, int ib, int ic, int id,
+        List<(int, int, int, int)> current,
+        long partnerCostSoFar, long opponentCostSoFar,
+        int matchesPerRound,
+        Dictionary<string, int> partnerCount,
+        Dictionary<string, int> opponentCount,
+        SearchState best)
+    {
+        // Partner cost delta = (2k + 1) per added pair, where k = pre-existing partner count.
+        int pkA = partnerCount.GetValueOrDefault(PairKey(t1a, t1b));
+        int pkB = partnerCount.GetValueOrDefault(PairKey(t2a, t2b));
+        long deltaPartner = (2L * pkA + 1) + (2L * pkB + 1);
+
+        long newPartnerCost = partnerCostSoFar + deltaPartner;
+
+        long deltaOpp = opponentCount.GetValueOrDefault(PairKey(t1a, t2a))
+                      + opponentCount.GetValueOrDefault(PairKey(t1a, t2b))
+                      + opponentCount.GetValueOrDefault(PairKey(t1b, t2a))
+                      + opponentCount.GetValueOrDefault(PairKey(t1b, t2b));
+        long newOpponentCost = opponentCostSoFar + deltaOpp;
+
+        // Tight admissible lower bound: each remaining slot must contribute at least 2 partner
+        // cost units (2 pairs * 1 each). Future opp contribution >= 0.
+        int newDepth = current.Count + 1;
+        long futurePartnerLB = 2L * (matchesPerRound - newDepth);
+        long lb = (newPartnerCost + futurePartnerLB) * PartnerWeight + newOpponentCost;
+        if (lb >= best.BestScore) return;
+
+        current.Add((t1a, t1b, t2a, t2b));
+        var newRemaining = new List<int>(remaining.Count - 4);
+        for (int k = 1; k < remaining.Count; k++)
+            if (k != ib && k != ic && k != id) newRemaining.Add(remaining[k]);
+
+        Search(newRemaining, current, newPartnerCost, newOpponentCost,
+               matchesPerRound, partnerCount, opponentCount, best);
+        current.RemoveAt(current.Count - 1);
     }
 
     /// <summary>

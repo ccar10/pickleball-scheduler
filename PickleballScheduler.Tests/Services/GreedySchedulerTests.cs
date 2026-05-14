@@ -66,6 +66,61 @@ public class GreedySchedulerTests
         Assert.True(max - min <= 1, $"bye spread {max - min}");
     }
 
+    [Theory]
+    [InlineData(9)]
+    [InlineData(10)]
+    [InlineData(11)]
+    [InlineData(14)]
+    public void Generate_NonCanonicalSize_NoPartnerRepeatsOver_n_Rounds(int n)
+    {
+        // For sizes that don't divide evenly into 4 (or otherwise miss the Whist sizes),
+        // we want greedy to produce a partner-unique schedule for at least n rounds with
+        // max courts. n rounds is mathematically achievable for all four sizes here:
+        //   n=9,  2 courts -> 4 partner-pair slots/round * 9 = 36 = C(9,2)
+        //   n=10, 2 courts -> 4 * 10 = 40 <= C(10,2)=45
+        //   n=11, 2 courts -> 4 * 11 = 44 <= C(11,2)=55
+        //   n=14, 3 courts -> 6 * 14 = 84 <= C(14,2)=91
+        var players = MakePlayers(n);
+        var generator = new ScheduleGenerator();
+        int courts = n / 4;
+
+        var result = generator.Generate(players, courts, numberOfRounds: n);
+
+        var partnerRounds = new Dictionary<(int, int), List<int>>();
+        foreach (var round in result.Rounds)
+        {
+            foreach (var match in round.Matches)
+            {
+                AddPair(partnerRounds, match.Team1Player1Id, match.Team1Player2Id, round.RoundNumber);
+                AddPair(partnerRounds, match.Team2Player1Id, match.Team2Player2Id, round.RoundNumber);
+            }
+        }
+
+        var dupes = partnerRounds.Where(kv => kv.Value.Count > 1)
+                                 .OrderByDescending(kv => kv.Value.Count)
+                                 .ThenBy(kv => kv.Key)
+                                 .ToList();
+        if (dupes.Count > 0)
+        {
+            int triples = dupes.Count(kv => kv.Value.Count >= 3);
+            var details = string.Join("; ", dupes.Take(6).Select(kv =>
+                $"p{kv.Key.Item1}+p{kv.Key.Item2} in rounds [{string.Join(",", kv.Value)}]"));
+            if (dupes.Count > 6) details += $"; ...+{dupes.Count - 6} more";
+            Assert.Fail($"n={n}, {courts} courts, {n} rounds: {dupes.Count} duplicate partnerships ({triples} triples). {details}");
+        }
+    }
+
+    private static void AddPair(Dictionary<(int, int), List<int>> dict, int a, int b, int roundNumber)
+    {
+        var key = a < b ? (a, b) : (b, a);
+        if (!dict.TryGetValue(key, out var list))
+        {
+            list = new List<int>();
+            dict[key] = list;
+        }
+        list.Add(roundNumber);
+    }
+
     [Fact]
     public void Generate_14Players_3Courts_8Rounds_NoDoubleBooking()
     {
