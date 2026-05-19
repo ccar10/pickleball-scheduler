@@ -121,6 +121,70 @@ public class GreedySchedulerTests
         list.Add(roundNumber);
     }
 
+    // (n, courts, 0-indexed max-first-coverage round). Locks in the *current* behavior of
+    // the greedy + B&B scheduler for sizes that fall outside the Whist canon — Whist sizes
+    // have an analytical coverage guarantee via the base-round search; non-Whist sizes
+    // don't, so this test gives bye-selection and greedy changes a precise before/after
+    // diff. Baselines captured 2026-05-14.
+    public static TheoryData<int, int, int> NonCanonicalCoverage()
+    {
+        var d = new TheoryData<int, int, int>();
+        d.Add(9, 2, 5);
+        d.Add(10, 2, 6);
+        d.Add(11, 2, 9);
+        d.Add(13, 3, 9);
+        d.Add(14, 3, 12);
+        d.Add(15, 3, 12);
+        return d;
+    }
+
+    [Theory]
+    [MemberData(nameof(NonCanonicalCoverage))]
+    public void Generate_NonCanonicalSize_MaxFirstCoverageRound(int n, int courts, int expected)
+    {
+        var players = MakePlayers(n);
+        var generator = new ScheduleGenerator();
+        // Generate enough rounds that full coverage is reached even with bye-heavy sizes.
+        // 25 is comfortably above the theoretical floor for all sizes tested here.
+        var result = generator.Generate(players, courts, numberOfRounds: 25);
+
+        int actual = ComputeMaxFirstCoverageRound(result, n);
+        Assert.Equal(expected, actual);
+    }
+
+    private static int ComputeMaxFirstCoverageRound(ScheduleResult result, int n)
+    {
+        var firstSeen = new Dictionary<(int, int), int>();
+        foreach (var round in result.Rounds)
+        {
+            foreach (var match in round.Matches)
+            {
+                int[] foursome = { match.Team1Player1Id, match.Team1Player2Id, match.Team2Player1Id, match.Team2Player2Id };
+                for (int i = 0; i < 4; i++)
+                    for (int j = i + 1; j < 4; j++)
+                    {
+                        int a = Math.Min(foursome[i], foursome[j]);
+                        int b = Math.Max(foursome[i], foursome[j]);
+                        if (!firstSeen.ContainsKey((a, b)))
+                            firstSeen[(a, b)] = round.RoundNumber - 1;
+                    }
+            }
+        }
+
+        int expectedPairs = n * (n - 1) / 2;
+        if (firstSeen.Count < expectedPairs)
+        {
+            var missing = new List<(int, int)>();
+            for (int a = 1; a <= n; a++)
+                for (int b = a + 1; b <= n; b++)
+                    if (!firstSeen.ContainsKey((a, b))) missing.Add((a, b));
+            throw new InvalidOperationException(
+                $"Coverage incomplete for n={n}: {missing.Count} pairs never coincided. " +
+                $"Examples: {string.Join(", ", missing.Take(5).Select(p => $"p{p.Item1}-p{p.Item2}"))}");
+        }
+        return firstSeen.Values.Max();
+    }
+
     [Fact]
     public void Generate_14Players_3Courts_8Rounds_NoDoubleBooking()
     {

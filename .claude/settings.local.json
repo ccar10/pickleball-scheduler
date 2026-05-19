@@ -79,7 +79,10 @@
       "Bash(taskkill /F /IM testhost.exe /IM dotnet.exe)",
       "Bash(ls *.sln)",
       "Bash(ls */*.sln)",
-      "Bash(tee dev-server.log)"
+      "Bash(tee dev-server.log)",
+      "mcp__codegraph__codegraph_explore",
+      "Bash(tasklist /FI \"IMAGENAME eq dotnet.exe\" /FI \"IMAGENAME eq testhost.exe\")",
+      "Bash(powershell *)"
     ]
   }
 }
