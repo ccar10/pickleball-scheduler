@@ -57,6 +57,55 @@ public class WhistMatchupsTests
     }
 
     /// <summary>
+    /// Foursome uniqueness rules out the *same* 4-player set across the whole schedule,
+    /// but doesn't bound how many players from round r's foursome re-appear together in
+    /// round r+1. Paul reported the worst case (3 of 4) for n=24 on 2026-05-19: Wh(24)
+    /// match 0 was {inf, 0, 1, 2}, and the +1 rotation shifts that to {inf, 1, 2, 3} —
+    /// three shared players on whatever court that foursome lands on, every round
+    /// transition. The other Whist sizes already stay at ≤ 2 by base-round design.
+    /// </summary>
+    [Theory]
+    [InlineData(8)]
+    [InlineData(12)]
+    [InlineData(16)]
+    [InlineData(20)]
+    [InlineData(24)]
+    public void ShippedBaseRound_BackToBackSameCourtOverlap_AtMost2(int n)
+    {
+        var players = Enumerable.Range(1, n)
+            .Select(i => new Player { Id = i, Name = $"P{i}" })
+            .ToList();
+        var generator = new ScheduleGenerator();
+        var schedule = generator.Generate(players, numberOfCourts: n / 4, numberOfRounds: n - 1);
+
+        int worst = 0;
+        (int round, int court1, int court2)? worstAt = null;
+        for (int r = 0; r < schedule.Rounds.Count - 1; r++)
+        {
+            var a = schedule.Rounds[r];
+            var b = schedule.Rounds[r + 1];
+            foreach (var ma in a.Matches)
+            {
+                var setA = new HashSet<int> { ma.Team1Player1Id, ma.Team1Player2Id, ma.Team2Player1Id, ma.Team2Player2Id };
+                foreach (var mb in b.Matches)
+                {
+                    int overlap = (new[] { mb.Team1Player1Id, mb.Team1Player2Id, mb.Team2Player1Id, mb.Team2Player2Id })
+                        .Count(setA.Contains);
+                    if (overlap > worst)
+                    {
+                        worst = overlap;
+                        worstAt = (r + 1, ma.CourtNumber, mb.CourtNumber);
+                    }
+                }
+            }
+        }
+
+        Assert.True(worst <= 2,
+            $"Wh({n}) has {worst}-player same-foursome overlap between consecutive rounds " +
+            $"(round {worstAt?.round} court {worstAt?.court1} → round {worstAt?.round + 1} court {worstAt?.court2})");
+    }
+
+    /// <summary>
     /// Reconstructs the production base round by calling WhistMatchups indirectly through
     /// the public ScheduleGenerator surface. Round 0's matches give us the base structure.
     /// Player IDs are 1..n (player 1 is inf in our convention here). Convert player IDs back

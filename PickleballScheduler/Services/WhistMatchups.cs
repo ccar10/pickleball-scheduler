@@ -28,30 +28,45 @@ internal static class WhistMatchups
 
         var baseRound = BaseRounds[players.Count];
         var rotateMod = players.Count - 1;
+        var rotationStep = RotationSteps.GetValueOrDefault(players.Count, 1);
 
         var matches = new List<Match>(baseRound.Length);
         foreach (var bm in baseRound)
         {
             matches.Add(new Match
             {
-                Team1Player1Id = ResolveRole(bm.A, roundIndex, rotateMod, players),
-                Team1Player2Id = ResolveRole(bm.B, roundIndex, rotateMod, players),
-                Team2Player1Id = ResolveRole(bm.C, roundIndex, rotateMod, players),
-                Team2Player2Id = ResolveRole(bm.D, roundIndex, rotateMod, players),
+                Team1Player1Id = ResolveRole(bm.A, roundIndex, rotateMod, rotationStep, players),
+                Team1Player2Id = ResolveRole(bm.B, roundIndex, rotateMod, rotationStep, players),
+                Team2Player1Id = ResolveRole(bm.C, roundIndex, rotateMod, rotationStep, players),
+                Team2Player2Id = ResolveRole(bm.D, roundIndex, rotateMod, rotationStep, players),
             });
         }
         return matches;
     }
 
-    private static int ResolveRole(string role, int roundIndex, int rotateMod, List<Player> players)
+    private static int ResolveRole(string role, int roundIndex, int rotateMod, int rotationStep, List<Player> players)
     {
         if (role == "inf") return players[0].Id;
         var i = int.Parse(role);
-        var rotated = (i + roundIndex) % rotateMod;
+        var rotated = (i + roundIndex * rotationStep) % rotateMod;
         return players[1 + rotated].Id;
     }
 
     private record BaseMatch(string A, string B, string C, string D);
+
+    // Per-round rotation step k applied to finite roles. Any k coprime to (n-1) preserves
+    // Whist validity (every finite pair partners once, opposes twice across n-1 rounds),
+    // since rotation by k still generates Z_(n-1). Default is 1; override when k > 1 reduces
+    // consecutive-round same-foursome overlap.
+    //
+    // Wh(24): step 3 — match 0's finite roles are {0, 1, 2}, so step 1 puts {inf, k, k+1, k+2}
+    // and {inf, k+1, k+2, k+3} in match 0 on consecutive rounds (3-player overlap on the same
+    // court). Step 3 shifts finite roles by 3 per round, leaving only inf shared in match 0
+    // and capping cross-match overlap at 2 (matching Wh(20)).
+    private static readonly IReadOnlyDictionary<int, int> RotationSteps = new Dictionary<int, int>
+    {
+        [24] = 3,
+    };
 
     private static readonly IReadOnlyDictionary<int, BaseMatch[]> BaseRounds =
         new Dictionary<int, BaseMatch[]>
