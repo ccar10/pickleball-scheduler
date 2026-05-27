@@ -14,6 +14,29 @@
 
 <body>
     <Routes />
+    <script>
+        // iOS 12 / Safari 12 and below can't parse blazor.web.js (ES2020 syntax
+        // like ?. and ??), so the SignalR circuit never starts and the page
+        // hangs on the static "Loading..." placeholder. Detect via eval (string
+        // literal — old engines parse this script fine) and show a clear message.
+        (function () {
+            var ok = false;
+            try { eval('var a={};var b=a?.x??1;'); ok = true; } catch (e) { }
+            if (!ok) {
+                document.body.innerHTML =
+                    '<div style="padding:32px;font-family:-apple-system,system-ui,sans-serif;max-width:600px;margin:40px auto;line-height:1.6;color:#222">' +
+                    '<img src="/images/NEPC-Logo.svg" alt="" style="height:48px;margin-bottom:16px" />' +
+                    '<h2 style="color:#b00020;margin-top:0">Browser too old</h2>' +
+                    '<p>The Pickleball Scheduler needs a newer browser than this device has.</p>' +
+                    '<p>Please open this site on one of:</p>' +
+                    '<ul><li>An iPad running iPadOS 13.4 or later</li>' +
+                    '<li>A laptop or desktop computer</li>' +
+                    '<li>A modern Android tablet or phone</li></ul>' +
+                    '<p style="color:#666;font-size:0.9em;margin-top:24px">Technical note: this app uses JavaScript features (ES2020) that this device\'s browser does not support.</p>' +
+                    '</div>';
+            }
+        })();
+    </script>
     <script src="_framework/blazor.web.js"></script>
     <script>
         window.pbHelpers = {
