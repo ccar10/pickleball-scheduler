@@ -58,14 +58,8 @@ internal static class WhistMatchups
     // Whist validity (every finite pair partners once, opposes twice across n-1 rounds),
     // since rotation by k still generates Z_(n-1). Default is 1; override when k > 1 reduces
     // consecutive-round same-foursome overlap.
-    //
-    // Wh(24): step 3 — match 0's finite roles are {0, 1, 2}, so step 1 puts {inf, k, k+1, k+2}
-    // and {inf, k+1, k+2, k+3} in match 0 on consecutive rounds (3-player overlap on the same
-    // court). Step 3 shifts finite roles by 3 per round, leaving only inf shared in match 0
-    // and capping cross-match overlap at 2 (matching Wh(20)).
     private static readonly IReadOnlyDictionary<int, int> RotationSteps = new Dictionary<int, int>
     {
-        [24] = 3,
     };
 
     private static readonly IReadOnlyDictionary<int, BaseMatch[]> BaseRounds =
@@ -114,16 +108,21 @@ internal static class WhistMatchups
                 new BaseMatch("10", "13", "14",  "15"),
             },
             // Wh(24): players inf, 0..22. Rotation mod 23.
-            // Redesign deferred — search did not complete in available budget.
-            // See docs/superpowers/specs/2026-05-07-whist-base-round-redesign.md.
+            // Bounded search 2026-05-30: first valid candidate with max first-coverage ≤ 12,
+            // down from the pre-redesign value of 20. The full optimal search is intractable
+            // for n=24 with the current enumerator (>260 CPU-hours with no triples completing);
+            // the theoretical floor is ⌈23/3⌉ = 8 but the foursome-uniqueness-constrained
+            // optimum is unknown. Match 0's finite roles {5, 14, 16} are not consecutive, so
+            // the default rotation step (1) keeps back-to-back same-court overlap ≤ 2 without
+            // the old step-3 workaround.
             [24] = new[]
             {
-                new BaseMatch("inf", "0",  "1",  "2"),
-                new BaseMatch("3",   "14", "4",  "7"),
-                new BaseMatch("5",   "20", "12", "17"),
-                new BaseMatch("6",   "15", "21", "11"),
-                new BaseMatch("8",   "10", "13", "19"),
-                new BaseMatch("9",   "16", "18", "22"),
+                new BaseMatch("inf", "5",  "14", "16"),
+                new BaseMatch("0",   "3",  "17", "18"),
+                new BaseMatch("1",   "13", "11", "19"),
+                new BaseMatch("2",   "21", "9",  "22"),
+                new BaseMatch("4",   "10", "6",  "20"),
+                new BaseMatch("7",   "12", "8",  "15"),
             },
         };
 }

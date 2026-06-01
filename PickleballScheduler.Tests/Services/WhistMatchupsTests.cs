@@ -10,14 +10,15 @@ public class WhistMatchupsTests
     {
         // 0-indexed worst-case round at which the slowest player has shared a court with
         // everyone else. n=16 and n=20 updated 2026-05-13 when the search added the
-        // foursome-uniqueness constraint (see WhistMatchups.cs comments). n=24 is the
-        // original pre-redesign value (search did not complete in budget).
+        // foursome-uniqueness constraint (see WhistMatchups.cs comments). n=24 was
+        // 20 (pre-redesign); reduced to 12 on 2026-05-30 via bounded search (the full
+        // optimal search is intractable at n=24 with the current enumerator).
         var d = new TheoryData<int, int>();
         d.Add(8, 3);
         d.Add(12, 6);
         d.Add(16, 6);
         d.Add(20, 11);
-        d.Add(24, 20);
+        d.Add(24, 12);
         return d;
     }
 

@@ -10,52 +10,70 @@ internal static class BaseRoundEnumerator
     /// </summary>
     public static IEnumerable<BaseRoundCandidate> Enumerate(int n)
     {
-        if (n % 4 != 0) throw new ArgumentException("n must be divisible by 4", nameof(n));
-        if (!new[] { 8, 12, 16, 20, 24 }.Contains(n))
-            throw new ArgumentException($"unsupported size {n}", nameof(n));
-
+        ValidateSize(n);
         int rotateMod = n - 1;
-        int maxClass = rotateMod / 2;
-
-        // partnerHits[k]  = how many finite partner pairs with diff-class k we've added so far.  Limit 1.
-        // opponentHits[k] = how many finite opponent pairs with diff-class k we've added so far. Limit 2.
-        var partnerHits  = new int[maxClass + 1];
-        var opponentHits = new int[maxClass + 1];
-
-        var finiteRoles = Enumerable.Range(0, rotateMod).ToArray();
-
-        // Match[0] loop: (Inf, a, b, c).
-        // Teams: (Inf, a) vs (b, c).
-        //   Finite partner pair: (b, c)   — both finite.
-        //   Finite opponent pairs: (a, b) and (a, c)  — Inf-side pairs are skipped.
         for (int a = 0; a < rotateMod; a++)
         for (int b = a + 1; b < rotateMod; b++)
         for (int c = b + 1; c < rotateMod; c++)
+            foreach (var cand in EnumerateForTriple(n, a, b, c))
+                yield return cand;
+    }
+
+    /// <summary>
+    /// Yields candidate base rounds for size n whose match[0] is fixed as (Inf, a, b, c).
+    /// Uses fresh per-call difference-class state, so safe for parallel invocation across
+    /// disjoint triples.
+    /// </summary>
+    public static IEnumerable<BaseRoundCandidate> EnumerateForTriple(int n, int a, int b, int c)
+    {
+        ValidateSize(n);
+        int rotateMod = n - 1;
+        if (a < 0 || a >= b || b >= c || c >= rotateMod)
+            throw new ArgumentException($"invalid triple ({a},{b},{c}) for n={n}");
+        int maxClass = rotateMod / 2;
+
+        var partnerHits  = new int[maxClass + 1];
+        var opponentHits = new int[maxClass + 1];
+
+        int bcClass = Difference.Class(b, c, rotateMod);  // partner
+        int abClass = Difference.Class(a, b, rotateMod);  // opponent
+        int acClass = Difference.Class(a, c, rotateMod);  // opponent
+
+        if (!TryApply(partnerHits,  bcClass, 1)) yield break;
+        if (!TryApply(opponentHits, abClass, 2)) yield break;
+        if (!TryApply(opponentHits, acClass, 2)) yield break;
+
+        var m0 = new BaseRoundCandidate.Match(BaseRoundCandidate.Inf, a, b, c);
+        var finiteRoles = Enumerable.Range(0, rotateMod).ToArray();
+        var remaining = finiteRoles.Where(r => r != a && r != b && r != c).ToArray();
+
+        foreach (var rest in PartitionIntoMatches(remaining, rotateMod, partnerHits, opponentHits))
         {
-            int bcClass = Difference.Class(b, c, rotateMod);  // partner
-            int abClass = Difference.Class(a, b, rotateMod);  // opponent
-            int acClass = Difference.Class(a, c, rotateMod);  // opponent
-
-            // Apply m0 contributions; revert and skip if any class would be exceeded.
-            if (!TryApply(partnerHits,  bcClass, 1)) continue;
-            if (!TryApply(opponentHits, abClass, 2)) { Revert(partnerHits,  bcClass); continue; }
-            if (!TryApply(opponentHits, acClass, 2)) { Revert(opponentHits, abClass); Revert(partnerHits,  bcClass); continue; }
-
-            var m0 = new BaseRoundCandidate.Match(BaseRoundCandidate.Inf, a, b, c);
-            var remaining = finiteRoles.Where(r => r != a && r != b && r != c).ToArray();
-
-            foreach (var rest in PartitionIntoMatches(remaining, rotateMod, partnerHits, opponentHits))
-            {
-                var allMatches = new List<BaseRoundCandidate.Match> { m0 };
-                allMatches.AddRange(rest);
-                yield return new BaseRoundCandidate(n, allMatches);
-            }
-
-            // Revert m0 contributions.
-            Revert(opponentHits, acClass);
-            Revert(opponentHits, abClass);
-            Revert(partnerHits,  bcClass);
+            var allMatches = new List<BaseRoundCandidate.Match> { m0 };
+            allMatches.AddRange(rest);
+            yield return new BaseRoundCandidate(n, allMatches);
         }
+    }
+
+    /// <summary>
+    /// Enumerates all top-level (a, b, c) triples for size n. Each triple defines a
+    /// possible match[0] (Inf, a, b, c). Used by parallel searchers to split work.
+    /// </summary>
+    public static IEnumerable<(int a, int b, int c)> EnumerateTopLevelTriples(int n)
+    {
+        ValidateSize(n);
+        int rotateMod = n - 1;
+        for (int a = 0; a < rotateMod; a++)
+        for (int b = a + 1; b < rotateMod; b++)
+        for (int c = b + 1; c < rotateMod; c++)
+            yield return (a, b, c);
+    }
+
+    private static void ValidateSize(int n)
+    {
+        if (n % 4 != 0) throw new ArgumentException("n must be divisible by 4", nameof(n));
+        if (!new[] { 8, 12, 16, 20, 24 }.Contains(n))
+            throw new ArgumentException($"unsupported size {n}", nameof(n));
     }
 
     // Returns true and increments hits[k] if the result would not exceed limit; leaves array

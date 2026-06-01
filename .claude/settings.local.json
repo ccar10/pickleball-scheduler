@@ -82,7 +82,8 @@
       "Bash(tee dev-server.log)",
       "mcp__codegraph__codegraph_explore",
       "Bash(tasklist /FI \"IMAGENAME eq dotnet.exe\" /FI \"IMAGENAME eq testhost.exe\")",
-      "Bash(powershell *)"
+      "Bash(powershell *)",
+      "PowerShell(dotnet build *)"
     ]
   }
 }

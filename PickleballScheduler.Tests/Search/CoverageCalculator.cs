@@ -9,22 +9,33 @@ internal static class CoverageCalculator
     /// For each player p, returns the smallest 0-indexed round R such that across rounds 0..R,
     /// p has shared a court with every other player. If a player never reaches full coverage
     /// in n-1 rounds, that's a fatal validity issue — assertion fails.
+    ///
+    /// Uses bitmasks (n <= 32 fits in uint) for fast per-foursome updates and target checks.
     /// </summary>
-    public static Result Compute(BaseRoundCandidate c)
+    public static Result Compute(BaseRoundCandidate c) => Compute(c, pruneAtMaxRound: int.MaxValue);
+
+    /// <summary>
+    /// Branch-and-bound variant: returns a result with MaxCoverageRound == pruneAtMaxRound + 1
+    /// (a sentinel meaning "no better than the cutoff") if any player has not reached full
+    /// coverage by round pruneAtMaxRound. Use pruneAtMaxRound = int.MaxValue for no pruning.
+    /// </summary>
+    public static Result Compute(BaseRoundCandidate c, int pruneAtMaxRound)
     {
         int n = c.PlayerCount;
         int rotateMod = c.RotateMod;
-        int rounds = rotateMod;  // n-1 rounds in canonical Whist cycle
+        int rounds = rotateMod;
 
-        var met = new HashSet<int>[n];
-        for (int p = 0; p < n; p++) met[p] = new HashSet<int>();
+        if (n > 32)
+            throw new InvalidOperationException("Bitmask coverage requires n <= 32");
 
-        var coverage = new int[n];
-        for (int p = 0; p < n; p++) coverage[p] = -1;
+        uint allOthersMask = n == 32 ? uint.MaxValue : (1u << n) - 1u;
 
-        int target = n - 1;
+        Span<uint> met = stackalloc uint[n];
+        Span<int> coverage = stackalloc int[n];
+        for (int p = 0; p < n; p++) { met[p] = 0u; coverage[p] = -1; }
 
         Span<int> court = stackalloc int[4];
+
         for (int r = 0; r < rounds; r++)
         {
             foreach (var m in c.Matches)
@@ -34,26 +45,45 @@ internal static class CoverageCalculator
                 court[2] = ResolvePlayer(m.Team2A, r, rotateMod);
                 court[3] = ResolvePlayer(m.Team2B, r, rotateMod);
 
+                uint foursomeMask = (1u << court[0]) | (1u << court[1]) | (1u << court[2]) | (1u << court[3]);
+
                 for (int i = 0; i < 4; i++)
-                    for (int j = 0; j < 4; j++)
-                        if (i != j) met[court[i]].Add(court[j]);
+                {
+                    int p = court[i];
+                    met[p] |= foursomeMask & ~(1u << p);
+                }
             }
 
+            uint targetMask;
             for (int p = 0; p < n; p++)
-                if (coverage[p] < 0 && met[p].Count == target)
-                    coverage[p] = r;
+            {
+                if (coverage[p] >= 0) continue;
+                targetMask = allOthersMask & ~(1u << p);
+                if (met[p] == targetMask) coverage[p] = r;
+            }
+
+            // Branch-and-bound: once r exceeds the cutoff, any player still uncovered means this
+            // candidate cannot beat the current best. Return a sentinel result.
+            if (r >= pruneAtMaxRound)
+            {
+                for (int p = 0; p < n; p++)
+                    if (coverage[p] < 0)
+                        return new Result(pruneAtMaxRound + 1, int.MaxValue, Array.Empty<int>());
+            }
         }
 
         int max = 0, sum = 0;
+        var coverageArr = new int[n];
         for (int p = 0; p < n; p++)
         {
             if (coverage[p] < 0)
                 throw new InvalidOperationException(
-                    $"player {p} did not reach coverage in {rounds} rounds (met {met[p].Count}/{target}) — base round invalid");
+                    $"player {p} did not reach coverage in {rounds} rounds — base round invalid");
+            coverageArr[p] = coverage[p];
             if (coverage[p] > max) max = coverage[p];
             sum += coverage[p];
         }
-        return new Result(max, sum, coverage);
+        return new Result(max, sum, coverageArr);
     }
 
     private static int ResolvePlayer(int role, int round, int rotateMod)

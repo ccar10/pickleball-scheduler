@@ -47,7 +47,7 @@ public class SearchRunnerTests
         Assert.Equal(6, best!.MaxCoverageRound);
     }
 
-    [Theory(Skip = "Manual run: unskip to regenerate base rounds. Can take minutes for large n.")]
+    [Theory(Skip = "Manual run: unskip to regenerate base rounds. n=24 uses bounded search (full optimal intractable).")]
     [InlineData(12)]
     [InlineData(16)]
     [InlineData(20)]
@@ -57,12 +57,24 @@ public class SearchRunnerTests
         var shipped = TestData.ShippedBaseRound(n);
         var shippedCoverage = CoverageCalculator.Compute(shipped).MaxCoverageRound;
 
-        var best = SearchRunner.FindBest(n);
+        var progressPath = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), $"whist-search-progress-n{n}.txt");
+        SearchRunner.Best? best;
+        if (n == 24)
+        {
+            // Bounded — full optimal infeasible (>260 CPU-hours with no triples completing).
+            best = SearchRunner.FindFirstAcceptable(n, targetMaxCoverage: 12, progressPath);
+        }
+        else
+        {
+            best = SearchRunner.FindBestParallel(n, progressPath);
+        }
         Assert.NotNull(best);
 
         Assert.True(WhistValidator.IsValid(best!.Candidate, out _));
         _output.WriteLine($"Wh({n}) best max-coverage round (0-indexed): {best.MaxCoverageRound}");
         _output.WriteLine($"Wh({n}) shipped max-coverage round (0-indexed): {shippedCoverage}");
+        _output.WriteLine($"Progress log: {progressPath}");
         _output.WriteLine($"Improvement: {shippedCoverage - best.MaxCoverageRound} rounds");
         _output.WriteLine("");
         _output.WriteLine(FormatForPaste(best.Candidate));
