@@ -87,6 +87,39 @@ public class EventService
         await _db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Swaps the positions of two players within a single round and saves.
+    /// Court slots are updated in place; byes are deleted and re-inserted because
+    /// a bye's player id is part of its primary key and cannot be mutated.
+    /// </summary>
+    public async Task SwapPlayersAsync(int roundId, int playerIdA, int playerIdB)
+    {
+        if (playerIdA == playerIdB) return;
+
+        var round = await _db.Rounds
+            .Where(r => r.Id == roundId)
+            .Include(r => r.Matches)
+            .Include(r => r.Byes)
+            .FirstOrDefaultAsync();
+        if (round == null) return;
+
+        RoundEditor.SwapInMatches(round, playerIdA, playerIdB);
+
+        // Byes: delete any whose player is being swapped, then re-add with the
+        // swapped player id (primary key change requires delete + insert).
+        var changedByes = round.Byes
+            .Where(b => b.PlayerId == playerIdA || b.PlayerId == playerIdB)
+            .ToList();
+        foreach (var bye in changedByes)
+        {
+            _db.Byes.Remove(bye);
+            var newPlayerId = bye.PlayerId == playerIdA ? playerIdB : playerIdA;
+            _db.Byes.Add(new Bye { RoundId = roundId, PlayerId = newPlayerId });
+        }
+
+        await _db.SaveChangesAsync();
+    }
+
     public async Task DeleteAsync(int id)
     {
         var evt = await _db.Events

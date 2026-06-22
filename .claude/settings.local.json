@@ -83,7 +83,21 @@
       "mcp__codegraph__codegraph_explore",
       "Bash(tasklist /FI \"IMAGENAME eq dotnet.exe\" /FI \"IMAGENAME eq testhost.exe\")",
       "Bash(powershell *)",
-      "PowerShell(dotnet build *)"
+      "PowerShell(dotnet build *)",
+      "Bash(cd \"C:/Users/ccaruso/Dropbox/round-robin/PickleballScheduler/Data\")",
+      "Bash(ls -la *.db)",
+      "Bash(command -v sqlite3)",
+      "Bash(command -v node)",
+      "Bash(command -v npx)",
+      "Bash(npx --version)",
+      "Bash(command -v dotnet)",
+      "Read(//c/Users/ccaruso/.cache/**)",
+      "Bash(mkdir -p /tmp/pwtest)",
+      "Bash(npm init *)",
+      "Bash(npm i *)",
+      "Bash(npx playwright *)",
+      "PowerShell($p = Get-Process -Name PickleballScheduler -ErrorAction SilentlyContinue; if \\($p\\) { \"still running: $\\($p.Id\\)\" } else { \"app stopped\" })",
+      "PowerShell(Start-Process dotnet -ArgumentList 'run','--project','C:\\\\Users\\\\ccaruso\\\\Dropbox\\\\round-robin\\\\PickleballScheduler','--no-build' -WindowStyle Hidden; Write-Output \"launching...\")"
     ]
   }
 }

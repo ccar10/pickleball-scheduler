@@ -104,6 +104,26 @@
     line-height: 1.1;
 }
 
+/* Rearrange (edit) mode: tappable player chips */
+.schedule-sheet .player-chip {
+    cursor: pointer;
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px dashed #b9c2cf;
+    display: inline-block;
+}
+
+.schedule-sheet .player-chip:hover {
+    background: #eef3fb;
+}
+
+.schedule-sheet .player-chip.selected {
+    background: #1E4B8F;
+    color: #fff;
+    border-style: solid;
+    border-color: #1E4B8F;
+}
+
 /* Print tuning */
 @page {
     size: landscape;

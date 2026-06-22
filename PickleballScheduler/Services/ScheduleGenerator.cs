@@ -11,6 +11,41 @@ public class ScheduleGenerator
     /// are assigned by per-round permutation against the running per-player court counts.
     /// All other configurations use greedy throughout.
     /// </summary>
+    /// <summary>
+    /// Generates a schedule of equal quality to <see cref="Generate"/> but varied by a random seed.
+    /// The greedy path is deterministic in player id (it sorts by id and breaks ties by id), so
+    /// regenerating with the same players always yields the same matchups. Because schedule quality
+    /// (partner/opponent spread, court balance) is invariant under relabeling, we randomly relabel
+    /// players to contiguous ids, generate, then map the ids back — producing a different but
+    /// equally-good schedule each seed, without touching the tuned generator internals.
+    /// </summary>
+    public ScheduleResult GenerateShuffled(List<Player> players, int numberOfCourts, int numberOfRounds, int seed)
+    {
+        var rng = new Random(seed);
+        var permuted = players.OrderBy(_ => rng.Next()).ToList();
+
+        var tempPlayers = permuted.Select((p, i) => new Player { Id = i + 1, Name = p.Name }).ToList();
+        var tempToReal = new Dictionary<int, int>(permuted.Count);
+        for (int i = 0; i < permuted.Count; i++) tempToReal[i + 1] = permuted[i].Id;
+
+        var result = Generate(tempPlayers, numberOfCourts, numberOfRounds);
+
+        foreach (var round in result.Rounds)
+        {
+            foreach (var m in round.Matches)
+            {
+                m.Team1Player1Id = tempToReal[m.Team1Player1Id];
+                m.Team1Player2Id = tempToReal[m.Team1Player2Id];
+                m.Team2Player1Id = tempToReal[m.Team2Player1Id];
+                m.Team2Player2Id = tempToReal[m.Team2Player2Id];
+            }
+            foreach (var b in round.Byes)
+                b.PlayerId = tempToReal[b.PlayerId];
+        }
+
+        return result;
+    }
+
     public ScheduleResult Generate(List<Player> players, int numberOfCourts, int numberOfRounds)
     {
         var matchesPerRound = Math.Min(numberOfCourts, players.Count / 4);
