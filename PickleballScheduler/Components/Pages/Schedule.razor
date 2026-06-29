@@ -180,26 +180,28 @@ else
                    evt.EventPlayers.Select(ep => ep.Player).ToList(), evt.Rounds); }
             @if (standings.Any(r => r.PointsFor > 0 || r.PointsAgainst > 0))
             {
-                <h2 class="standings-title">Standings</h2>
-                <table class="sheet-table standings-table">
-                    <thead>
-                        <tr><th>#</th><th class="text-start">Player</th><th>W</th><th>Diff</th><th>Pts</th></tr>
-                    </thead>
-                    <tbody>
-                        @{ int rank = 1; }
-                        @foreach (var row in standings)
-                        {
-                            <tr>
-                                <td>@rank</td>
-                                <td class="text-start">@row.Player.Name</td>
-                                <td>@row.Wins</td>
-                                <td>@(row.Diff > 0 ? $"+{row.Diff}" : row.Diff.ToString())</td>
-                                <td>@row.PointsFor</td>
-                            </tr>
-                            rank++;
-                        }
-                    </tbody>
-                </table>
+                <div class="no-print">
+                    <h2 class="standings-title">Standings</h2>
+                    <table class="sheet-table standings-table">
+                        <thead>
+                            <tr><th>#</th><th class="text-start">Player</th><th>W</th><th>Diff</th><th>Pts</th></tr>
+                        </thead>
+                        <tbody>
+                            @{ int rank = 1; }
+                            @foreach (var row in standings)
+                            {
+                                <tr>
+                                    <td>@rank</td>
+                                    <td class="text-start">@row.Player.Name</td>
+                                    <td>@row.Wins</td>
+                                    <td>@(row.Diff > 0 ? $"+{row.Diff}" : row.Diff.ToString())</td>
+                                    <td>@row.PointsFor</td>
+                                </tr>
+                                rank++;
+                            }
+                        </tbody>
+                    </table>
+                </div>
             }
         </div>
     }
