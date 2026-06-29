@@ -25,6 +25,9 @@ else
         <button class="btn btn-outline-primary btn-sm me-2" @onclick="OnGenerateChampionshipClicked" disabled="@isGenerating">
             @(isGenerating ? "Generating..." : (HasChampionship ? "Regenerate Championship Round" : "Generate Championship Round"))
         </button>
+        <label class="me-2 small align-middle" style="cursor: pointer; user-select: none;">
+            <input type="checkbox" class="form-check-input me-1" @bind="showScores" /> Show scores
+        </label>
         @if (HasChampionship)
         {
             <button class="btn btn-outline-danger btn-sm" @onclick="RemoveChampionship" disabled="@isRemoving">
@@ -113,7 +116,7 @@ else
             <div class="sheet-subtitle">
                 @evt.Date.ToString("MMMM d, yyyy") &middot; @evt.EventPlayers.Count players &middot; @courtNames.Count courts
             </div>
-            <table class="sheet-table">
+            <table class="sheet-table @(showScores ? "show-scores" : null)">
                 <thead>
                     <tr>
                         <th class="round-col">Round</th>
@@ -138,16 +141,22 @@ else
                                     {
                                         <div class="team-line">
                                             <span>@PlayerSpan(round.Id, match.Team1Player1) &amp; @PlayerSpan(round.Id, match.Team1Player2)</span>
-                                            <input type="number" min="0" class="score-input"
-                                                   value="@match.Team1Score"
-                                                   @onchange="@(e => OnScoreChanged(match, team1: true, e.Value?.ToString()))" />
+                                            @if (showScores)
+                                            {
+                                                <input type="number" min="0" class="score-input"
+                                                       value="@match.Team1Score"
+                                                       @onchange="@(e => OnScoreChanged(match, team1: true, e.Value?.ToString()))" />
+                                            }
                                         </div>
                                         <div class="vs">vs</div>
                                         <div class="team-line">
                                             <span>@PlayerSpan(round.Id, match.Team2Player1) &amp; @PlayerSpan(round.Id, match.Team2Player2)</span>
-                                            <input type="number" min="0" class="score-input"
-                                                   value="@match.Team2Score"
-                                                   @onchange="@(e => OnScoreChanged(match, team1: false, e.Value?.ToString()))" />
+                                            @if (showScores)
+                                            {
+                                                <input type="number" min="0" class="score-input"
+                                                       value="@match.Team2Score"
+                                                       @onchange="@(e => OnScoreChanged(match, team1: false, e.Value?.ToString()))" />
+                                            }
                                         </div>
                                     }
                                 </td>
@@ -209,6 +218,7 @@ else
     private string? swapWarning;
 
     private bool isGenerating;
+    private bool showScores = true;
     private bool isRemoving;
     private bool showUnscoredWarning;
     private bool champNotEnoughPlayers;
@@ -421,8 +431,14 @@ else
     .champ-row { background-color: #fff3cd; }
     .standings-title { font-size: 1.1rem; margin-top: 1rem; }
     .standings-table { width: auto; }
+    @@media screen {
+        /* When scores are shown, shift the names and "vs" left together so they
+           keep clear of the right-anchored score box (and stay aligned). */
+        .show-scores .team-line,
+        .show-scores .vs { padding-right: 3.75rem; }
+    }
     @@media print {
-        /* The printed schedule is a clean handout — omit the per-match score inputs. */
+        /* The printed schedule is a clean handout — never print the score inputs. */
         .score-input { display: none !important; }
     }
 </style>
