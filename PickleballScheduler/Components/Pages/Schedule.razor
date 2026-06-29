@@ -411,8 +411,13 @@ else
 }
 
 <style>
-    .score-input { width: 3rem; margin-left: 0.4rem; text-align: center; }
-    .team-line { display: flex; align-items: center; justify-content: space-between; }
+    /* Names stay centered (so "vs" lines up under them); the score box is
+       anchored to the right edge of its line without shifting the names. */
+    .team-line { position: relative; text-align: center; }
+    .score-input {
+        position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+        width: 3rem; text-align: center;
+    }
     .champ-row { background-color: #fff3cd; }
     .standings-title { font-size: 1.1rem; margin-top: 1rem; }
     .standings-table { width: auto; }
