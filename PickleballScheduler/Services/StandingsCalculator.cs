@@ -44,6 +44,7 @@ public static class StandingsCalculator
             .ThenByDescending(r => r.Diff)
             .ThenByDescending(r => r.PointsFor)
             .ThenBy(r => r.Player.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.Player.Id)
             .ToList();
 
         void Accumulate(int[] team, int scored, int conceded, bool won)

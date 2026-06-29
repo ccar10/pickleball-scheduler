@@ -324,6 +324,7 @@ else
         if (evt == null || isRegenerating) return;
 
         isRegenerating = true;
+        champNotEnoughPlayers = false;
         try
         {
             var players = evt.EventPlayers.Select(ep => ep.Player!).ToList();
