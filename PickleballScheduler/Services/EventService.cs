@@ -120,6 +120,61 @@ public class EventService
         await _db.SaveChangesAsync();
     }
 
+    public async Task SaveMatchScoreAsync(int matchId, int? team1Score, int? team2Score)
+    {
+        var match = await _db.Matches.FirstOrDefaultAsync(m => m.Id == matchId);
+        if (match == null) return;
+        match.Team1Score = team1Score;
+        match.Team2Score = team2Score;
+        await _db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Computes standings from the event's regular (non-championship) rounds and builds a
+    /// final round seeding the strongest players onto the lowest-numbered courts. Any existing
+    /// championship round is replaced. Returns the created round, or null if there are too few
+    /// players to fill a single court of four.
+    /// </summary>
+    public async Task<Round?> GenerateChampionshipRoundAsync(int eventId)
+    {
+        var evt = await GetByIdAsync(eventId);
+        if (evt == null) return null;
+
+        await RemoveChampionshipRoundAsync(eventId);
+
+        var players = evt.EventPlayers.Select(ep => ep.Player).ToList();
+        var regularRounds = evt.Rounds.Where(r => !r.IsChampionship).ToList();
+        var standings = StandingsCalculator.Compute(players, regularRounds);
+
+        int nextRoundNumber = (evt.Rounds.Where(r => !r.IsChampionship)
+            .Select(r => (int?)r.RoundNumber).Max() ?? 0) + 1;
+
+        var round = ChampionshipRoundBuilder.Build(standings, evt.NumberOfCourts, nextRoundNumber);
+        if (round == null) return null;
+
+        round.EventId = eventId;
+        _db.Rounds.Add(round);
+        await _db.SaveChangesAsync();
+        return round;
+    }
+
+    public async Task RemoveChampionshipRoundAsync(int eventId)
+    {
+        var champ = await _db.Rounds
+            .Where(r => r.EventId == eventId && r.IsChampionship)
+            .Include(r => r.Matches)
+            .Include(r => r.Byes)
+            .ToListAsync();
+
+        foreach (var r in champ)
+        {
+            _db.Matches.RemoveRange(r.Matches);
+            _db.Byes.RemoveRange(r.Byes);
+        }
+        _db.Rounds.RemoveRange(champ);
+        await _db.SaveChangesAsync();
+    }
+
     public async Task DeleteAsync(int id)
     {
         var evt = await _db.Events
