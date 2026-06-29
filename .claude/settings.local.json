@@ -97,7 +97,9 @@
       "Bash(npm i *)",
       "Bash(npx playwright *)",
       "PowerShell($p = Get-Process -Name PickleballScheduler -ErrorAction SilentlyContinue; if \\($p\\) { \"still running: $\\($p.Id\\)\" } else { \"app stopped\" })",
-      "PowerShell(Start-Process dotnet -ArgumentList 'run','--project','C:\\\\Users\\\\ccaruso\\\\Dropbox\\\\round-robin\\\\PickleballScheduler','--no-build' -WindowStyle Hidden; Write-Output \"launching...\")"
+      "PowerShell(Start-Process dotnet -ArgumentList 'run','--project','C:\\\\Users\\\\ccaruso\\\\Dropbox\\\\round-robin\\\\PickleballScheduler','--no-build' -WindowStyle Hidden; Write-Output \"launching...\")",
+      "Bash(cat \"$\\(git rev-parse --show-toplevel\\)/.superpowers/sdd/progress.md\")",
+      "Bash(ls \"C:/Users/ccaruso/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/skills/subagent-driven-development/scripts/\")"
     ]
   }
 }
