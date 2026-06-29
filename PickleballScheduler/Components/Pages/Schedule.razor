@@ -27,7 +27,9 @@ else
         </button>
         @if (HasChampionship)
         {
-            <button class="btn btn-outline-danger btn-sm" @onclick="RemoveChampionship">Remove Championship Round</button>
+            <button class="btn btn-outline-danger btn-sm" @onclick="RemoveChampionship" disabled="@isRemoving">
+                @(isRemoving ? "Removing..." : "Remove Championship Round")
+            </button>
         }
     </div>
 
@@ -207,6 +209,7 @@ else
     private string? swapWarning;
 
     private bool isGenerating;
+    private bool isRemoving;
     private bool showUnscoredWarning;
     private bool champNotEnoughPlayers;
     private int unscoredCount;
@@ -390,10 +393,19 @@ else
 
     private async Task RemoveChampionship()
     {
-        if (evt == null) return;
-        await EventService.RemoveChampionshipRoundAsync(evt.Id);
-        evt = await EventService.GetByIdAsync(EventId);
-        courtNames = evt?.GetCourtNamesList() ?? new();
+        if (evt == null || isRemoving) return;
+        isRemoving = true;
+        champNotEnoughPlayers = false;
+        try
+        {
+            await EventService.RemoveChampionshipRoundAsync(evt.Id);
+            evt = await EventService.GetByIdAsync(EventId);
+            courtNames = evt?.GetCourtNamesList() ?? new();
+        }
+        finally
+        {
+            isRemoving = false;
+        }
     }
 }
 
