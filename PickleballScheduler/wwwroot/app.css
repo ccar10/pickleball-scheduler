@@ -87,6 +87,12 @@
     border: 0;
 }
 
+/* Vertical separators between columns (round | court | court | ... | bye) */
+.schedule-sheet .sheet-table td:not(.round-num),
+.schedule-sheet .sheet-table thead th:not(.round-col) {
+    border-left: 1px solid #C2CEE0;
+}
+
 .schedule-sheet .sheet-table td.round-num {
     font-weight: 700;
     width: 60px;
@@ -178,6 +184,12 @@
 
     .schedule-sheet .sheet-table thead th {
         border-bottom: 1px solid #333 !important;
+    }
+
+    /* Keep vertical court separators when printed */
+    .schedule-sheet .sheet-table td:not(.round-num),
+    .schedule-sheet .sheet-table thead th:not(.round-col) {
+        border-left: 1px solid #999 !important;
     }
 
     .schedule-sheet .sheet-table td { padding: 4px 6px; }
