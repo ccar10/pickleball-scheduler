@@ -22,17 +22,20 @@ else
         <button class="btn btn-outline-warning btn-sm me-2" @onclick="@(() => showRegenerateConfirm = true)" disabled="@isRegenerating">
             @(isRegenerating ? "Regenerating..." : "Regenerate")
         </button>
-        <button class="btn btn-outline-primary btn-sm me-2" @onclick="OnGenerateChampionshipClicked" disabled="@isGenerating">
-            @(isGenerating ? "Generating..." : (HasChampionship ? "Regenerate Championship Round" : "Generate Championship Round"))
-        </button>
         <label class="me-2 small align-middle" style="cursor: pointer; user-select: none;">
-            <input type="checkbox" class="form-check-input me-1" @bind="showScores" /> Show scores
+            <input type="checkbox" class="form-check-input me-1" @bind="trackScores" /> Track scores
         </label>
-        @if (HasChampionship)
+        @if (trackScores)
         {
-            <button class="btn btn-outline-danger btn-sm" @onclick="RemoveChampionship" disabled="@isRemoving">
-                @(isRemoving ? "Removing..." : "Remove Championship Round")
+            <button class="btn btn-outline-primary btn-sm me-2" @onclick="OnGenerateChampionshipClicked" disabled="@isGenerating">
+                @(isGenerating ? "Generating..." : (HasChampionship ? "Regenerate Championship Round" : "Generate Championship Round"))
             </button>
+            @if (HasChampionship)
+            {
+                <button class="btn btn-outline-danger btn-sm" @onclick="RemoveChampionship" disabled="@isRemoving">
+                    @(isRemoving ? "Removing..." : "Remove Championship Round")
+                </button>
+            }
         }
     </div>
 
@@ -95,7 +98,7 @@ else
         </div>
     }
 
-    @if (champNotEnoughPlayers)
+    @if (trackScores && champNotEnoughPlayers)
     {
         <div class="alert alert-warning py-2 no-print" role="alert">
             Not enough players for a championship court (need at least 4). Enter more players or scores first.
@@ -116,7 +119,7 @@ else
             <div class="sheet-subtitle">
                 @evt.Date.ToString("MMMM d, yyyy") &middot; @evt.EventPlayers.Count players &middot; @courtNames.Count courts
             </div>
-            <table class="sheet-table @(showScores ? "show-scores" : null)">
+            <table class="sheet-table @(trackScores ? "show-scores" : null)">
                 <thead>
                     <tr>
                         <th class="round-col">Round</th>
@@ -141,7 +144,7 @@ else
                                     {
                                         <div class="team-line">
                                             <span>@PlayerSpan(round.Id, match.Team1Player1) &amp; @PlayerSpan(round.Id, match.Team1Player2)</span>
-                                            @if (showScores)
+                                            @if (trackScores)
                                             {
                                                 <input type="number" min="0" class="score-input"
                                                        value="@match.Team1Score"
@@ -151,7 +154,7 @@ else
                                         <div class="vs">vs</div>
                                         <div class="team-line">
                                             <span>@PlayerSpan(round.Id, match.Team2Player1) &amp; @PlayerSpan(round.Id, match.Team2Player2)</span>
-                                            @if (showScores)
+                                            @if (trackScores)
                                             {
                                                 <input type="number" min="0" class="score-input"
                                                        value="@match.Team2Score"
@@ -178,7 +181,7 @@ else
             </table>
             @{ var standings = StandingsCalculator.Compute(
                    evt.EventPlayers.Select(ep => ep.Player).ToList(), evt.Rounds); }
-            @if (standings.Any(r => r.PointsFor > 0 || r.PointsAgainst > 0))
+            @if (trackScores && standings.Any(r => r.PointsFor > 0 || r.PointsAgainst > 0))
             {
                 <div class="no-print">
                     <h2 class="standings-title">Standings</h2>
@@ -220,7 +223,7 @@ else
     private string? swapWarning;
 
     private bool isGenerating;
-    private bool showScores = true;
+    private bool trackScores;
     private bool isRemoving;
     private bool showUnscoredWarning;
     private bool champNotEnoughPlayers;
