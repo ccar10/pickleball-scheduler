@@ -19,9 +19,16 @@ else
         <button class="btn btn-sm me-2 @(editMode ? "btn-success" : "btn-outline-success")" @onclick="ToggleEditMode">
             @(editMode ? "Done Editing" : "Rearrange Players")
         </button>
-        <button class="btn btn-outline-warning btn-sm" @onclick="@(() => showRegenerateConfirm = true)" disabled="@isRegenerating">
+        <button class="btn btn-outline-warning btn-sm me-2" @onclick="@(() => showRegenerateConfirm = true)" disabled="@isRegenerating">
             @(isRegenerating ? "Regenerating..." : "Regenerate")
         </button>
+        <button class="btn btn-outline-primary btn-sm me-2" @onclick="OnGenerateChampionshipClicked" disabled="@isGenerating">
+            @(isGenerating ? "Generating..." : (HasChampionship ? "Regenerate Championship Round" : "Generate Championship Round"))
+        </button>
+        @if (HasChampionship)
+        {
+            <button class="btn btn-outline-danger btn-sm" @onclick="RemoveChampionship">Remove Championship Round</button>
+        }
     </div>
 
     @if (editMode)
@@ -50,7 +57,7 @@ else
                                 @onclick="@(() => showRegenerateConfirm = false)"></button>
                     </div>
                     <div class="modal-body">
-                        <p class="mb-0">This will replace the current schedule with a new one. The existing rounds and matches will be deleted.</p>
+                        <p class="mb-0">This will replace the current schedule with a new one. The existing rounds, matches, <strong>entered scores, and any championship round</strong> will be deleted.</p>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary"
@@ -59,6 +66,34 @@ else
                     </div>
                 </div>
             </div>
+        </div>
+    }
+
+    @if (showUnscoredWarning)
+    {
+        <div class="modal d-block no-print" tabindex="-1" role="dialog" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Some matches have no score</h5>
+                        <button type="button" class="btn-close" aria-label="Close" @onclick="@(() => showUnscoredWarning = false)"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-0">⚠️ @unscoredCount of @totalMatchCount matches are unscored. Standings will use only the scores you've entered.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="@(() => showUnscoredWarning = false)">Cancel</button>
+                        <button type="button" class="btn btn-primary" @onclick="ConfirmGenerateChampionship">Generate anyway</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (champNotEnoughPlayers)
+    {
+        <div class="alert alert-warning py-2 no-print" role="alert">
+            Not enough players for a championship court (need at least 4). Enter more players or scores first.
         </div>
     }
 
@@ -90,8 +125,8 @@ else
                 <tbody>
                     @foreach (var round in evt.Rounds.OrderBy(r => r.RoundNumber))
                     {
-                        <tr>
-                            <td class="round-num">@round.RoundNumber</td>
+                        <tr class="@(round.IsChampionship ? "champ-row" : null)">
+                            <td class="round-num">@(round.IsChampionship ? "🏆" : round.RoundNumber.ToString())</td>
                             @for (int c = 0; c < courtNames.Count; c++)
                             {
                                 var courtNum = c + 1;
@@ -99,9 +134,19 @@ else
                                 <td class="match-cell">
                                     @if (match != null)
                                     {
-                                        <div>@PlayerSpan(round.Id, match.Team1Player1) &amp; @PlayerSpan(round.Id, match.Team1Player2)</div>
+                                        <div class="team-line">
+                                            <span>@PlayerSpan(round.Id, match.Team1Player1) &amp; @PlayerSpan(round.Id, match.Team1Player2)</span>
+                                            <input type="number" min="0" class="score-input"
+                                                   value="@match.Team1Score"
+                                                   @onchange="@(e => OnScoreChanged(match, team1: true, e.Value?.ToString()))" />
+                                        </div>
                                         <div class="vs">vs</div>
-                                        <div>@PlayerSpan(round.Id, match.Team2Player1) &amp; @PlayerSpan(round.Id, match.Team2Player2)</div>
+                                        <div class="team-line">
+                                            <span>@PlayerSpan(round.Id, match.Team2Player1) &amp; @PlayerSpan(round.Id, match.Team2Player2)</span>
+                                            <input type="number" min="0" class="score-input"
+                                                   value="@match.Team2Score"
+                                                   @onchange="@(e => OnScoreChanged(match, team1: false, e.Value?.ToString()))" />
+                                        </div>
                                     }
                                 </td>
                             }
@@ -120,6 +165,31 @@ else
                     }
                 </tbody>
             </table>
+            @{ var standings = StandingsCalculator.Compute(
+                   evt.EventPlayers.Select(ep => ep.Player).ToList(), evt.Rounds); }
+            @if (standings.Any(r => r.PointsFor > 0 || r.PointsAgainst > 0))
+            {
+                <h2 class="standings-title">Standings</h2>
+                <table class="sheet-table standings-table">
+                    <thead>
+                        <tr><th>#</th><th class="text-start">Player</th><th>W</th><th>Diff</th><th>Pts</th></tr>
+                    </thead>
+                    <tbody>
+                        @{ int rank = 1; }
+                        @foreach (var row in standings)
+                        {
+                            <tr>
+                                <td>@rank</td>
+                                <td class="text-start">@row.Player.Name</td>
+                                <td>@row.Wins</td>
+                                <td>@(row.Diff > 0 ? $"+{row.Diff}" : row.Diff.ToString())</td>
+                                <td>@row.PointsFor</td>
+                            </tr>
+                            rank++;
+                        }
+                    </tbody>
+                </table>
+            }
         </div>
     }
 }
@@ -135,6 +205,14 @@ else
     private bool editMode;
     private (int RoundId, int PlayerId)? selected;
     private string? swapWarning;
+
+    private bool isGenerating;
+    private bool showUnscoredWarning;
+    private bool champNotEnoughPlayers;
+    private int unscoredCount;
+    private int totalMatchCount;
+
+    private bool HasChampionship => evt?.Rounds.Any(r => r.IsChampionship) ?? false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -260,4 +338,73 @@ else
             isRegenerating = false;
         }
     }
+
+    private async Task OnScoreChanged(Match match, bool team1, string? raw)
+    {
+        int? value = int.TryParse(raw, out var v) && v >= 0 ? v : null;
+        if (team1) match.Team1Score = value;
+        else match.Team2Score = value;
+
+        await EventService.SaveMatchScoreAsync(match.Id, match.Team1Score, match.Team2Score);
+        // standings recompute on the re-render that follows this handler
+    }
+
+    private async Task OnGenerateChampionshipClicked()
+    {
+        if (evt == null) return;
+        var regularMatches = evt.Rounds.Where(r => !r.IsChampionship).SelectMany(r => r.Matches).ToList();
+        totalMatchCount = regularMatches.Count;
+        unscoredCount = regularMatches.Count(m => m.Team1Score is null || m.Team2Score is null);
+
+        if (unscoredCount > 0)
+        {
+            showUnscoredWarning = true;
+            return;
+        }
+        await GenerateChampionship();
+    }
+
+    private async Task ConfirmGenerateChampionship()
+    {
+        showUnscoredWarning = false;
+        await GenerateChampionship();
+    }
+
+    private async Task GenerateChampionship()
+    {
+        if (evt == null || isGenerating) return;
+        isGenerating = true;
+        champNotEnoughPlayers = false;
+        try
+        {
+            var created = await EventService.GenerateChampionshipRoundAsync(evt.Id);
+            champNotEnoughPlayers = created == null;
+            evt = await EventService.GetByIdAsync(EventId);
+            courtNames = evt?.GetCourtNamesList() ?? new();
+        }
+        finally
+        {
+            isGenerating = false;
+        }
+    }
+
+    private async Task RemoveChampionship()
+    {
+        if (evt == null) return;
+        await EventService.RemoveChampionshipRoundAsync(evt.Id);
+        evt = await EventService.GetByIdAsync(EventId);
+        courtNames = evt?.GetCourtNamesList() ?? new();
+    }
 }
+
+<style>
+    .score-input { width: 3rem; margin-left: 0.4rem; text-align: center; }
+    .team-line { display: flex; align-items: center; justify-content: space-between; }
+    .champ-row { background-color: #fff3cd; }
+    .standings-title { font-size: 1.1rem; margin-top: 1rem; }
+    .standings-table { width: auto; }
+    @@media print {
+        .score-input { border: none; width: auto; -webkit-appearance: none; appearance: none; }
+        .score-input::-webkit-outer-spin-button, .score-input::-webkit-inner-spin-button { display: none; }
+    }
+</style>
