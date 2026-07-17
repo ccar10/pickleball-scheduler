@@ -25,6 +25,9 @@ else
         <label class="me-2 small align-middle" style="cursor: pointer; user-select: none;">
             <input type="checkbox" class="form-check-input me-1" @bind="trackScores" /> Track scores
         </label>
+        <label class="me-2 small align-middle" style="cursor: pointer; user-select: none;">
+            <input type="checkbox" class="form-check-input me-1" @bind="showByeColumn" /> Show Bye column
+        </label>
         @if (trackScores)
         {
             <button class="btn btn-outline-primary btn-sm me-2" @onclick="OnGenerateChampionshipClicked" disabled="@isGenerating">
@@ -127,7 +130,10 @@ else
                         {
                             <th>@courtName</th>
                         }
-                        <th>Bye</th>
+                        @if (showByeColumn)
+                        {
+                            <th>Bye</th>
+                        }
                     </tr>
                 </thead>
                 <tbody>
@@ -164,17 +170,20 @@ else
                                     }
                                 </td>
                             }
-                            <td class="bye-cell">
-                                @{ var byeList = round.Byes.ToList(); }
-                                @for (int b = 0; b < byeList.Count; b++)
-                                {
-                                    if (b > 0)
+                            @if (showByeColumn)
+                            {
+                                <td class="bye-cell">
+                                    @{ var byeList = round.Byes.ToList(); }
+                                    @for (int b = 0; b < byeList.Count; b++)
                                     {
-                                        <span>, </span>
+                                        if (b > 0)
+                                        {
+                                            <span>, </span>
+                                        }
+                                        @PlayerSpan(round.Id, byeList[b].Player)
                                     }
-                                    @PlayerSpan(round.Id, byeList[b].Player)
-                                }
-                            </td>
+                                </td>
+                            }
                         </tr>
                     }
                 </tbody>
@@ -224,6 +233,7 @@ else
 
     private bool isGenerating;
     private bool trackScores;
+    private bool showByeColumn = true;
     private bool isRemoving;
     private bool showUnscoredWarning;
     private bool champNotEnoughPlayers;
