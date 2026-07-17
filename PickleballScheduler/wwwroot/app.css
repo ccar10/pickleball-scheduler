@@ -110,6 +110,11 @@
     line-height: 1.1;
 }
 
+.schedule-sheet .sheet-table td.match-cell .team-line {
+    font-size: 13pt;
+    font-weight: 600;
+}
+
 /* Rearrange (edit) mode: tappable player chips */
 .schedule-sheet .player-chip {
     cursor: pointer;
@@ -193,6 +198,7 @@
     }
 
     .schedule-sheet .sheet-table td { padding: 4px 6px; }
+    .schedule-sheet .sheet-table td.match-cell .team-line { font-size: 12pt; }
     .schedule-sheet .sheet-title { font-size: 16pt; }
     .schedule-sheet .sheet-banner { padding: 8px 12px; }
 
