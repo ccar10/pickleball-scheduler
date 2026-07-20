@@ -93,9 +93,16 @@
     border-left: 1px solid #C2CEE0;
 }
 
+/* Under table-layout: fixed the column width is read from the header cell, so
+   the width must live on .round-col (not just the body .round-num). Sized to
+   snugly fit the word "Round" — the court and Bye columns split the rest. */
+.schedule-sheet .sheet-table th.round-col,
+.schedule-sheet .sheet-table td.round-num {
+    width: 60px;
+}
+
 .schedule-sheet .sheet-table td.round-num {
     font-weight: 700;
-    width: 38px;
 }
 
 .schedule-sheet .sheet-table td.bye-cell {
