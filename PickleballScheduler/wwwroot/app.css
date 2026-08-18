@@ -85,6 +85,8 @@
     text-align: center;
     vertical-align: middle;
     border: 0;
+    /* Horizontal separator between each round */
+    border-bottom: 2px solid #8A9BB5;
 }
 
 /* Vertical separators between columns (round | court | court | ... | bye) */
@@ -202,6 +204,11 @@
     .schedule-sheet .sheet-table td:not(.round-num),
     .schedule-sheet .sheet-table thead th:not(.round-col) {
         border-left: 1px solid #999 !important;
+    }
+
+    /* Keep horizontal separators between rounds when printed */
+    .schedule-sheet .sheet-table tbody td {
+        border-bottom: 2px solid #555 !important;
     }
 
     .schedule-sheet .sheet-table td { padding: 4px 6px; }
